@@ -1,0 +1,23 @@
+# 환경변수 (절대 접근 금지)
+.env
+.env.*
+.env.local
+.env.development
+.env.staging
+.env.production
+
+# Git 자체
+.git
+
+# macOS
+.DS_Store
+
+# 로그
+*.log
+logs/
+
+# 패키지
+node_modules/
+
+# Github 워크플로우
+.github/
