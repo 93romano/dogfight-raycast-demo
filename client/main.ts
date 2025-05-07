@@ -1,7 +1,7 @@
-import { FlightScene } from './components/FlightScene';
+import { MultiplayerScene } from './components/MultiplayerScene';
 
 class Game {
-  private flightScene: FlightScene;
+  private multiplayerScene: MultiplayerScene;
   private speedElement: HTMLElement;
   private positionElement: HTMLElement;
 
@@ -21,24 +21,23 @@ class Game {
       throw new Error('Position element not found');
     }
 
-    this.flightScene = new FlightScene(canvas);
+    this.multiplayerScene = new MultiplayerScene(canvas);
     this.animate();
   }
 
   private animate = () => {
     requestAnimationFrame(this.animate);
-    this.flightScene.update();
+    this.multiplayerScene.update();
     this.updateHUD();
   };
 
   private updateHUD = () => {
-    this.speedElement.textContent = this.flightScene.getSpeed().toFixed(1);
-    const pos = this.flightScene.getPosition();
+    this.speedElement.textContent = this.multiplayerScene.getSpeed().toFixed(1);
+    const pos = this.multiplayerScene.getPosition();
     this.positionElement.textContent = `[${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}]`;
   };
 }
 
-// Initialize game when DOM is loaded
 window.addEventListener('DOMContentLoaded', () => {
   new Game();
-}); 
+});
