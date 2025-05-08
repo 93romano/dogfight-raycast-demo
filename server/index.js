@@ -36,7 +36,7 @@ function createStateUpdateBuffer(players) {
   // Write header
   buffer.writeUInt16BE(0, 0); // Sequence number
   buffer.writeUInt8(PACKET_TYPES.STATE_UPDATE, 2);
-  buffer.writeUInt32BE(Date.now(), 3);
+  buffer.writeUInt32BE(Date.now() % 0xFFFFFFFF, 3); // 32비트 범위로 제한
   buffer.writeUInt8(0, 7); // Flags
   
   // Write player states
@@ -72,6 +72,7 @@ function createStateUpdateBuffer(players) {
 }
 
 wss.on('connection', (ws) => {
+  console.log('🔌 New connection');
   const playerId = Date.now() & 0xFFFF; // 16-bit player ID
   
   // Initialize player state
@@ -106,6 +107,7 @@ wss.on('connection', (ws) => {
   });
   
   ws.on('close', () => {
+    console.log('🔌 Connection closed');
     players.delete(playerId);
   });
 });
