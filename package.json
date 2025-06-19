@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -17,6 +18,9 @@
     "vite": "^6.3.2"
   },
   "dependencies": {
-    "three": "^0.175.0"
+    "@types/socket.io-client": "^1.4.36",
+    "socket.io-client": "^4.8.1",
+    "three": "^0.175.0",
+    "ws": "^8.18.2"
   }
 }

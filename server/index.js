@@ -71,16 +71,69 @@ function createStateUpdateBuffer(players) {
   return buffer;
 }
 
+// 움직임 이벤트 처리 함수
+function handleMovementEvent(playerId, event, ws) {
+  const player = players.get(playerId);
+  if (!player) return;
+
+  console.log(`🎮 Player ${playerId} movement:`, event.input);
+
+  // 입력 상태 업데이트
+  player.inputState = {
+    forward: event.input.forward,
+    backward: event.input.backward,
+    left: event.input.left,
+    right: event.input.right,
+    up: event.input.up,
+    down: event.input.down,
+    roll: event.input.roll
+  };
+
+  // 위치와 회전 업데이트
+  player.position = event.position;
+  player.rotation = event.rotation;
+  player.speed = event.speed;
+
+  // 다른 플레이어들에게 움직임 이벤트 브로드캐스트
+  const movementMessage = JSON.stringify({
+    type: 'player-movement',
+    playerId: playerId,
+    event: event
+  });
+
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN && client !== ws) {
+      client.send(movementMessage);
+    }
+  });
+
+  // 움직임 확인 응답
+  ws.send(JSON.stringify({
+    type: 'movement-ack',
+    timestamp: Date.now()
+  }));
+}
+
 wss.on('connection', (ws) => {
   console.log('🔌 New connection');
   const playerId = Date.now() & 0xFFFF; // 16-bit player ID
+  console.log(`Player ID: ${playerId}`);
   
   // Initialize player state
   players.set(playerId, {
     position: [0, 0, 0],
     rotation: [0, 0, 0, 1],
     velocity: [0, 0, 0],
-    inputState: 0,
+    inputState: {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      up: false,
+      down: false,
+      roll: 0
+    },
+    speed: 0,
     lastInputSequence: 0
   });
   
@@ -88,27 +141,62 @@ wss.on('connection', (ws) => {
   ws.send(createStateUpdateBuffer(players));
   
   ws.on('message', (data) => {
-    if (!(data instanceof Buffer)) return;
-    
-    const packetType = data.readUInt8(2);
-    if (packetType === PACKET_TYPES.INPUT) {
-      const sequence = data.readUInt16BE(0);
-      const inputState = data.readUInt32BE(HEADER_SIZE);
-      
-      const player = players.get(playerId);
-      if (sequence > player.lastInputSequence) {
-        player.lastInputSequence = sequence;
-        player.inputState = inputState;
+    try {
+      // JSON 메시지 처리
+      if (typeof data === 'string') {
+        const message = JSON.parse(data);
+        console.log('📨 Received JSON message:', message.type);
         
-        // Process input and update state
-        // This would include physics calculations, etc.
+        switch (message.type) {
+          case 'update':
+            // 상태 업데이트 처리
+            const player = players.get(playerId);
+            if (player) {
+              player.position = message.state.position;
+              player.rotation = message.state.rotation;
+            }
+            break;
+          case 'movement':
+            // 움직임 이벤트 처리
+            handleMovementEvent(playerId, message.event, ws);
+            break;
+          default:
+            console.log('Unknown message type:', message.type);
+        }
+      } else if (data instanceof Buffer) {
+        // 바이너리 메시지 처리 (기존 코드)
+        const packetType = data.readUInt8(2);
+        if (packetType === PACKET_TYPES.INPUT) {
+          const sequence = data.readUInt16BE(0);
+          const inputState = data.readUInt32BE(HEADER_SIZE);
+          
+          const player = players.get(playerId);
+          if (sequence > player.lastInputSequence) {
+            player.lastInputSequence = sequence;
+            player.inputState = inputState;
+          }
+        }
       }
+    } catch (error) {
+      console.error('Error processing message:', error);
     }
   });
   
   ws.on('close', () => {
-    console.log('🔌 Connection closed');
+    console.log(`🔌 Connection closed for player ${playerId}`);
     players.delete(playerId);
+    
+    // 다른 플레이어들에게 플레이어 퇴장 알림
+    const leaveMessage = JSON.stringify({
+      type: 'player-left',
+      playerId: playerId
+    });
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(leaveMessage);
+      }
+    });
   });
 });
 

@@ -14,6 +14,9 @@ export class MultiplayerScene {
 
   private socket: SocketManager;
 
+  private lastStateUpdate: number = 0;
+  private stateUpdateInterval: number = 50; // 50ms
+
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -59,10 +62,15 @@ export class MultiplayerScene {
     );
 
     setInterval(() => {
-      this.socket.sendState({
-        position: this.localPlayer.position.toArray(),
-        rotation: this.localPlayer.quaternion.toArray()
-      });
+      console.log('client/scenes/MultiplayerScene.ts 🔌 sendState', this.localPlayer.position.toArray(), this.localPlayer.quaternion.toArray());
+      const now = Date.now();
+      if (now - this.lastStateUpdate >= this.stateUpdateInterval) {
+        this.socket.sendState({
+          position: this.localPlayer.position.toArray(),
+          rotation: this.localPlayer.quaternion.toArray()
+        });
+        this.lastStateUpdate = now;
+      }
     }, 50); // 20fps 주기
   }
 
@@ -108,4 +116,8 @@ export class MultiplayerScene {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   };
+
+  public sendState(state: PlayerState) {
+    this.socket.sendState(state);
+  }
 }
