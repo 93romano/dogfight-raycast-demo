@@ -49,33 +49,39 @@ export class SocketManager {
     };
 
     this.socket.onmessage = (event) => {
-      // 서버에서 받은 메시지 처리 (예: JSON 파싱)
-      const msg = JSON.parse(event.data);
-      console.log('🔌 onmessage', msg);
-      switch (msg.type) {
-        case 'player-joined':
-          console.log('🔌 player-joined', msg.id, msg.state);
-          this.onJoin(msg.id, msg.state);
-          break;
-        case 'player-update':
-          console.log('🔌 player-update', msg.id, msg.state);
-          this.onUpdate(msg.id, msg.state);
-          break;
-        case 'player-left':
-          console.log('🔌 player-left', msg.id);
-          this.onLeave(msg.id);
-          break;
-        case 'all-players':
-          console.log('🔌 all-players', msg.players);
-          this.onInitAll(msg.players);
-          break;
-        case 'player-movement':
-          console.log('🔌 player-movement', msg.playerId, msg.event);
-          this.onMovement(msg.playerId, msg.event);
-          break;
-        case 'movement-ack':
-          console.log('🔌 movement acknowledged by server');
-          break;
+      // 메시지가 문자열(JSON)인지, Blob(바이너리)인지 구분
+      if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data);
+          console.log('🔌 onmessage', msg);
+          switch (msg.type) {
+            case 'player-joined':
+              this.onJoin(msg.id, msg.state);
+              break;
+            case 'player-update':
+              this.onUpdate(msg.id, msg.state);
+              break;
+            case 'player-left':
+              this.onLeave(msg.id);
+              break;
+            case 'all-players':
+              this.onInitAll(msg.players);
+              break;
+            case 'player-movement':
+              this.onMovement(msg.playerId, msg.event);
+              break;
+            case 'movement-ack':
+              console.log('🔌 movement acknowledged by server');
+              break;
+          }
+        } catch (e) {
+          console.error('JSON Parse error:', e, event.data);
+        }
+      } else {
+        // console.log('🔌 onmessage-blob', event.data);
+        // 바이너리(Blob 등)는 무시하거나 필요시 별도 처리
+        // console.log('Received binary message', event.data);
+        return;
       }
     };
 

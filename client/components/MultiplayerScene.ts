@@ -370,7 +370,8 @@ export class MultiplayerScene {
     const now = performance.now();
     
     // 입력이 변경되었거나 일정 시간이 지났을 때만 이벤트 전송
-    if (this.inputChanged || (now - this.lastMovementTime) >= this.movementEventInterval) {
+    // if (this.inputChanged || (now - this.lastMovementTime) >= this.movementEventInterval) {
+      if (this.inputChanged) {
       const movementEvent: MovementEvent = {
         type: 'movement',
         input: {
@@ -424,6 +425,7 @@ export class MultiplayerScene {
   };
 
   public update = () => {
+    console.log('🔌 update');
     if (!this.localPlane) return;
 
     this.handleInput();

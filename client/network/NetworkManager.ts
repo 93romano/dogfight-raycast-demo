@@ -53,7 +53,7 @@ export class NetworkManager extends EventEmitter {
     
     this.ws.onmessage = (event) => {
       if (!(event.data instanceof ArrayBuffer)) return;
-      
+      console.log('Received message from server', event.data);
       const buffer = new DataView(event.data);
       const packetType = buffer.getUint8(2);
       
@@ -77,6 +77,7 @@ export class NetworkManager extends EventEmitter {
     
     for (let i = 0; i < playerCount; i++) {
       const playerId = buffer.getUint16(offset);
+      console.log('playerId', playerId);
       offset += 2;
       
       const position: [number, number, number] = [

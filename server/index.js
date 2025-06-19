@@ -140,6 +140,12 @@ wss.on('connection', (ws) => {
   // Send initial state
   ws.send(createStateUpdateBuffer(players));
   
+  // Send playerId to the client (welcome message)
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    playerId: playerId
+  }));
+  
   ws.on('message', (data) => {
     try {
       // JSON 메시지 처리
@@ -157,8 +163,14 @@ wss.on('connection', (ws) => {
             }
             break;
           case 'movement':
+            const playerId = message.playerId; // ← 누가 보냈는지 식별
             // 움직임 이벤트 처리
             handleMovementEvent(playerId, message.event, ws);
+            break;
+          case 'welcome':
+            // 클라이언트에서 자신의 playerId를 저장
+            players.get(playerId).myPlayerId = message.playerId;
+            console.log('내 playerId:', message.playerId);
             break;
           default:
             console.log('Unknown message type:', message.type);
