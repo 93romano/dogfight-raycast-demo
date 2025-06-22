@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { SocketManager, PlayerState } from '../network/SocketManager';
+import { PlayerIdInput } from '../components/PlayerIdInput';
 
 export class MultiplayerScene {
   private scene: THREE.Scene;
@@ -13,6 +14,7 @@ export class MultiplayerScene {
   private remotePlayers: Map<string, THREE.Mesh> = new Map();
 
   private socket: SocketManager;
+  private playerIdInput: PlayerIdInput | null = null;
 
   private lastStateUpdate: number = 0;
   private stateUpdateInterval: number = 50; // 50ms
@@ -28,7 +30,7 @@ export class MultiplayerScene {
     this.scene.add(this.localPlayer);
 
     this.setupLighting();
-    this.setupSocket();
+    this.showPlayerIdInput();
 
     window.addEventListener('resize', this.onWindowResize);
     this.animate();
@@ -47,7 +49,13 @@ export class MultiplayerScene {
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   }
 
-  private setupSocket() {
+  private showPlayerIdInput() {
+    this.playerIdInput = new PlayerIdInput((playerId: number) => {
+      this.initializeSocket(playerId);
+    });
+  }
+
+  private initializeSocket(playerId: number) {
     this.socket = new SocketManager(
       (id, state) => this.addRemotePlayer(id, state),
       (id, state) => this.updateRemotePlayer(id, state),
@@ -58,11 +66,15 @@ export class MultiplayerScene {
             this.addRemotePlayer(id, state);
           }
         }
-      }
+      },
+      (id, event) => this.handleRemotePlayerMovement(id, event)
     );
 
+    // 사용자 번호로 연결
+    this.socket.connectWithPlayerId(playerId);
+
+    // 상태 업데이트 시작
     setInterval(() => {
-      console.log('client/scenes/MultiplayerScene.ts 🔌 sendState', this.localPlayer.position.toArray(), this.localPlayer.quaternion.toArray());
       const now = Date.now();
       if (now - this.lastStateUpdate >= this.stateUpdateInterval) {
         this.socket.sendState({
@@ -71,7 +83,7 @@ export class MultiplayerScene {
         });
         this.lastStateUpdate = now;
       }
-    }, 50); // 20fps 주기
+    }, 50);
   }
 
   private addRemotePlayer(id: string, state: PlayerState) {

@@ -1,25 +1,29 @@
 {
   "name": "dogfight-raycast-demo",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Ultra-low-latency multiplayer FPS flight game",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "install:all": "npm install && npm run install:client && npm run install:server",
+    "install:client": "cd client && npm install",
+    "install:server": "cd server && npm install",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "cd client && npm run build",
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm run preview"
   },
-  "keywords": [],
+  "keywords": ["game", "multiplayer", "flight", "threejs", "websocket"],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/three": "^0.175.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.2"
+    "vite": "^6.3.2",
+    "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "@types/socket.io-client": "^1.4.36",
-    "socket.io-client": "^4.8.1",
     "three": "^0.175.0",
     "ws": "^8.18.2"
   }

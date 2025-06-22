@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SocketManager, PlayerState, MovementEvent } from '../network/SocketManager';
+import { PlayerIdInput } from './PlayerIdInput';
 
 interface PhysicsState {
   velocity: THREE.Vector3;
@@ -16,9 +17,10 @@ export class MultiplayerScene {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private localPlane: THREE.Group;
-  private otherPlayers: Map<string, THREE.Group> = new Map();
-  private socket: SocketManager;
+  public otherPlayers: Map<string, THREE.Group> = new Map();
+  private socket: SocketManager | null = null;
   private skybox: THREE.CubeTexture;
+  private playerIdInput: PlayerIdInput | null = null;
 
   private keys: Set<string> = new Set();
   private isPointerLocked = false;
@@ -41,7 +43,7 @@ export class MultiplayerScene {
   private readonly decel = 1.5;    // 감속도 (프레임당 감소량)
 
   private lastStateUpdate = 0;
-  private readonly stateUpdateInterval = 1000 / 20; // 20Hz state updates
+  private readonly stateUpdateInterval = 1000 / 10; // 20Hz → 10Hz로 줄임
 
   // 목표값 추가
   private targetPitch = 0;
@@ -67,7 +69,13 @@ export class MultiplayerScene {
   };
   private inputChanged = false;
   private lastMovementTime = 0;
-  private readonly movementEventInterval = 50; // 50ms마다 움직임 이벤트 전송
+  private readonly movementEventInterval = 5000; // 200ms → 5000ms (5초)
+
+  // 위치 변경 추적을 위한 변수 추가
+  private lastPosition: THREE.Vector3 = new THREE.Vector3();
+  private lastRotation: THREE.Quaternion = new THREE.Quaternion();
+  private positionChangeThreshold = 0.5; // 0.1 → 0.5로 늘림 (더 큰 변화만 감지)
+  private rotationChangeThreshold = 0.05; // 0.01 → 0.05로 늘림
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -81,7 +89,7 @@ export class MultiplayerScene {
 
     this.initSkybox();
     this.initLights();
-    this.initSocket();
+    this.showPlayerIdInput();
     this.initPointerLock();
     this.initEvents();
     this.initEnvironment();
@@ -219,20 +227,33 @@ export class MultiplayerScene {
     this.scene.add(ambientLight);
   }
 
-  private initSocket() {
+  private showPlayerIdInput() {
+    this.playerIdInput = new PlayerIdInput((playerId: number) => {
+      console.log('🎯 Player ID submitted:', playerId);
+      this.initializeSocket(playerId);
+    });
+  }
+
+  private initializeSocket(playerId: number) {
+    console.log('🔌 Initializing socket with Player ID:', playerId);
+    
     this.socket = new SocketManager(
       (id, state) => this.addRemotePlayer(id, state),
       (id, state) => this.updateRemotePlayer(id, state),
       (id) => this.removeRemotePlayer(id),
-      (allPlayers) => {
-        for (const id in allPlayers) {
-          if (id !== this.socket.getSocketId()) {
-            this.addRemotePlayer(id, allPlayers[id]);
+      (players) => {
+        console.log('📋 Received all players:', players);
+        Object.entries(players).forEach(([id, state]) => {
+          if (id !== playerId.toString()) {
+            this.addRemotePlayer(id, state);
           }
-        }
+        });
       },
       (id, event) => this.handleRemotePlayerMovement(id, event)
     );
+
+    // 사용자가 입력한 Player ID로 연결
+    this.socket.connectWithPlayerId(playerId);
   }
 
   private initPointerLock() {
@@ -261,34 +282,101 @@ export class MultiplayerScene {
   }
 
   private async addRemotePlayer(id: string, state: PlayerState) {
+    console.log(`🎮 Adding remote player ${id} at position:`, state.position);
+    
     const loader = new GLTFLoader();
     try {
       const gltf = await loader.loadAsync('assets/models/Jet.glb');
-      const mesh = gltf.scene;
+      const mesh = gltf.scene.clone(); // clone으로 각 유저별 독립적인 모델 생성
+      
+      // 다른 유저는 다른 색상으로 구분
+      const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44, 0xff44ff, 0x44ffff];
+      const color = colors[parseInt(id) % colors.length];
+      
+      // 비행기 색상 변경
+      mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(mat => {
+              if (mat.name.includes('Body') || mat.name.includes('Fuselage')) {
+                mat.color.setHex(color);
+              }
+            });
+          } else {
+            if (child.material.name.includes('Body') || child.material.name.includes('Fuselage')) {
+              child.material.color.setHex(color);
+            }
+          }
+        }
+      });
+      
       mesh.scale.set(1, 1, 1);
       mesh.position.fromArray(state.position);
       mesh.quaternion.fromArray(state.rotation);
+      
+      // 플레이어 ID 표시
+      this.addPlayerLabel(mesh, id);
+      
       this.scene.add(mesh);
       this.otherPlayers.set(id, mesh);
+      
+      console.log(`✅ Remote player ${id} added successfully`);
     } catch (error) {
       console.error('Error loading remote player model:', error);
       const mesh = this.createBasicPlane(0xff4444);
       mesh.position.fromArray(state.position);
       mesh.quaternion.fromArray(state.rotation);
+      this.addPlayerLabel(mesh, id);
       this.scene.add(mesh);
       this.otherPlayers.set(id, mesh);
     }
   }
 
+  // 플레이어 ID 라벨 추가
+  private addPlayerLabel(mesh: THREE.Group, id: string) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    
+    canvas.width = 256;
+    canvas.height = 64;
+    
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.fillStyle = 'white';
+    context.font = '24px Arial';
+    context.textAlign = 'center';
+    context.fillText(`Player ${id}`, canvas.width / 2, canvas.height / 2 + 8);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    
+    sprite.position.set(0, 3, 0); // 비행기 위에 표시
+    sprite.scale.set(2, 0.5, 1);
+    
+    mesh.add(sprite);
+  }
+
   private updateRemotePlayer(id: string, state: PlayerState) {
     const mesh = this.otherPlayers.get(id);
     if (mesh) {
-      // Smooth interpolation
+      // 부드러운 보간으로 업데이트
       const targetPosition = new THREE.Vector3().fromArray(state.position);
       const targetQuaternion = new THREE.Quaternion().fromArray(state.rotation);
       
-      mesh.position.lerp(targetPosition, 0.3);
-      mesh.quaternion.slerp(targetQuaternion, 0.3);
+      // 더 부드러운 보간 (낮은 값 = 더 부드러움)
+      mesh.position.lerp(targetPosition, 0.1);
+      mesh.quaternion.slerp(targetQuaternion, 0.1);
+      
+      // 디버그 로그 (선택사항)
+      if (Math.random() < 0.01) { // 1% 확률로 로그 출력
+        console.log(`🎮 Remote player ${id} updated:`, {
+          position: targetPosition.toArray(),
+          rotation: targetQuaternion.toArray()
+        });
+      }
     }
   }
 
@@ -363,15 +451,14 @@ export class MultiplayerScene {
     if (this.keys.has('ArrowDown')) this.targetPitch += 0.03;
   }
 
-  // 움직임 이벤트 전송
+  // 움직임 이벤트 전송 (5초마다)
   private sendMovementEvent() {
-    if (!this.localPlane) return;
+    if (!this.localPlane || !this.socket) return;
 
     const now = performance.now();
     
-    // 입력이 변경되었거나 일정 시간이 지났을 때만 이벤트 전송
-    // if (this.inputChanged || (now - this.lastMovementTime) >= this.movementEventInterval) {
-      if (this.inputChanged) {
+    // 5초마다 움직임 이벤트 전송
+    if ((now - this.lastMovementTime) >= this.movementEventInterval) {
       const movementEvent: MovementEvent = {
         type: 'movement',
         input: {
@@ -381,13 +468,16 @@ export class MultiplayerScene {
           right: this.lastInputState.right,
           up: this.lastInputState.up,
           down: this.lastInputState.down,
-          roll: this.rollSpeed / this.rollAccel // 정규화된 롤 값
+          roll: this.rollSpeed / this.rollAccel
         },
         position: this.localPlane.position.toArray(),
         rotation: this.localPlane.quaternion.toArray(),
         speed: this.speed
       };
 
+      console.log(`🎮 Sending movement event every 5 seconds - Player ID: ${this.socket.getSocketId()}`);
+      console.log(`   Position: [${this.localPlane.position.x.toFixed(2)}, ${this.localPlane.position.y.toFixed(2)}, ${this.localPlane.position.z.toFixed(2)}]`);
+      
       this.socket.sendMovementEvent(movementEvent);
       this.lastMovementTime = now;
       this.inputChanged = false;
@@ -397,6 +487,10 @@ export class MultiplayerScene {
   // updatePhysics 개선
   private updatePhysics(deltaTime: number) {
     if (!this.localPlane) return;
+
+    // 이전 위치와 회전 저장
+    this.lastPosition.copy(this.localPlane.position);
+    this.lastRotation.copy(this.localPlane.quaternion);
 
     // 목표값 → 실제값 보간
     this.pitch = THREE.MathUtils.lerp(this.pitch, this.targetPitch, this.lerpFactor);
@@ -416,6 +510,33 @@ export class MultiplayerScene {
     if (this.localPlane.position.y < 2) {
       this.localPlane.position.y = 2;
     }
+
+    // 위치나 회전이 변경되었는지 확인
+    this.checkPositionChange();
+  }
+
+  // 위치 변경 감지 및 서버 전송 (로그 줄임)
+  private checkPositionChange() {
+    if (!this.localPlane || !this.socket) return;
+
+    const positionChanged = this.localPlane.position.distanceTo(this.lastPosition) > this.positionChangeThreshold;
+    const rotationChanged = this.localPlane.quaternion.angleTo(this.lastRotation) > this.rotationChangeThreshold;
+
+    if (positionChanged || rotationChanged) {
+      // 로그 줄임 - 5초마다만 출력
+      const now = Date.now();
+      if (!this.lastLogTime || now - this.lastLogTime > 5000) {
+        console.log(`🎮 Position changed - Player ID: ${this.socket.getSocketId()}`);
+        console.log(`   Position: [${this.localPlane.position.x.toFixed(2)}, ${this.localPlane.position.y.toFixed(2)}, ${this.localPlane.position.z.toFixed(2)}]`);
+        this.lastLogTime = now;
+      }
+      
+      // 서버로 상태 전송
+      this.socket.sendState({
+        position: this.localPlane.position.toArray(),
+        rotation: this.localPlane.quaternion.toArray()
+      });
+    }
   }
 
   private onResize = () => {
@@ -425,7 +546,6 @@ export class MultiplayerScene {
   };
 
   public update = () => {
-    console.log('🔌 update');
     if (!this.localPlane) return;
 
     this.handleInput();
@@ -442,14 +562,10 @@ export class MultiplayerScene {
     this.camera.position.lerp(targetCameraPos, this.lerpFactor);
     this.camera.lookAt(this.localPlane.position);
 
-    // 움직임 이벤트 전송
+    // 움직임 이벤트 전송 (입력 변경 시)
     this.sendMovementEvent();
 
-    // 상태 업데이트는 변화가 있을 때만 전송 (SocketManager에서 처리)
-    this.socket.sendState({
-      position: this.localPlane.position.toArray(),
-      rotation: this.localPlane.quaternion.toArray()
-    });
+    // 위치 변경 감지는 updatePhysics에서 처리됨
 
     this.renderer.render(this.scene, this.camera);
   };
@@ -468,7 +584,7 @@ export class MultiplayerScene {
 
   public sendState(state: PlayerState) {
     console.log('[DEBUG] sendState called', state);
-    this.socket.sendState(state);
+    this.socket?.sendState(state);
   }
 
   private handleRemotePlayerMovement(id: string, event: MovementEvent) {
@@ -478,11 +594,15 @@ export class MultiplayerScene {
       const targetPosition = new THREE.Vector3().fromArray(event.position);
       const targetQuaternion = new THREE.Quaternion().fromArray(event.rotation);
       
-      // 부드러운 보간으로 업데이트
-      mesh.position.lerp(targetPosition, 0.3);
-      mesh.quaternion.slerp(targetQuaternion, 0.3);
+      // 더 부드러운 보간으로 업데이트
+      mesh.position.lerp(targetPosition, 0.2);
+      mesh.quaternion.slerp(targetQuaternion, 0.2);
       
-      console.log(`🎮 Remote player ${id} movement:`, event.input);
+      console.log(`🎮 Remote player ${id} movement:`, {
+        input: event.input,
+        position: event.position,
+        speed: event.speed
+      });
     }
   }
 }

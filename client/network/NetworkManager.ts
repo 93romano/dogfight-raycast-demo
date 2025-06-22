@@ -37,6 +37,9 @@ export class NetworkManager extends EventEmitter {
   private readonly TICK_RATE = 60;
   private readonly TICK_INTERVAL = 1000 / 60;
   
+  private lastLogTime = 0;
+  private readonly logInterval = 5000; // 5초마다만 로그 출력
+  
   constructor() {
     super();
   }
@@ -53,7 +56,14 @@ export class NetworkManager extends EventEmitter {
     
     this.ws.onmessage = (event) => {
       if (!(event.data instanceof ArrayBuffer)) return;
-      console.log('Received message from server', event.data);
+      
+      // 로그 빈도 줄이기
+      const now = Date.now();
+      if (!this.lastLogTime || now - this.lastLogTime > this.logInterval) {
+        console.log('Received message from server', event.data);
+        this.lastLogTime = now;
+      }
+      
       const buffer = new DataView(event.data);
       const packetType = buffer.getUint8(2);
       
@@ -77,7 +87,7 @@ export class NetworkManager extends EventEmitter {
     
     for (let i = 0; i < playerCount; i++) {
       const playerId = buffer.getUint16(offset);
-      console.log('playerId', playerId);
+      // 로그 제거 - 너무 자주 발생
       offset += 2;
       
       const position: [number, number, number] = [

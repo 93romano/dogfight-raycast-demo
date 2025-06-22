@@ -16,8 +16,8 @@
 *.log
 logs/
 
-# 패키지
-node_modules/
+# # 패키지
+# node_modules/
 
 # Github 워크플로우
 .github/

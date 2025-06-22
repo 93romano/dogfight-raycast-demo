@@ -1,0 +1,17 @@
+{
+  "name": "dogfight-raycast-server",
+  "version": "1.0.0",
+  "description": "Server for ultra-low-latency multiplayer FPS flight game",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": ["websocket", "game", "multiplayer", "server"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.18.2"
+  }
+} 
