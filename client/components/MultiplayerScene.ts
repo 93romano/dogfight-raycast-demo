@@ -38,9 +38,9 @@ export class MultiplayerScene {
 
   private speed = 0;
   private readonly minSpeed = 0;
-  private readonly maxSpeed = 100;
-  private readonly accel = 1;    // 가속도 (프레임당 증가량)
-  private readonly decel = 1.5;    // 감속도 (프레임당 감소량)
+  private readonly maxSpeed = 700;
+  private readonly accel = 5;
+  private readonly decel = 3;
 
   private lastStateUpdate = 0;
   private readonly stateUpdateInterval = 1000 / 10; // 20Hz → 10Hz로 줄임
@@ -310,7 +310,7 @@ export class MultiplayerScene {
         }
       });
       
-      mesh.scale.set(1, 1, 1);
+      mesh.scale.set(0.5, 0.5, 0.5);
       mesh.position.fromArray(state.position);
       mesh.quaternion.fromArray(state.rotation);
       

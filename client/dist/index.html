@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multiplayer Flight Game</title>
+    <style>
+      body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000;
+      }
+      canvas {
+        display: block;
+      }
+      #hud {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-family: Arial, sans-serif;
+        pointer-events: none;
+        background-color: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #debug {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        color: white;
+        font-family: Arial, sans-serif;
+        pointer-events: none;
+        background-color: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+        max-width: 300px;
+      }
+      .input-status {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        margin: 2px;
+        border-radius: 3px;
+        text-align: center;
+        font-size: 12px;
+        line-height: 20px;
+      }
+      .input-active {
+        background-color: #4CAF50;
+      }
+      .input-inactive {
+        background-color: #666;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/main-B8nPRB8E.js"></script>
+  </head>
+  <body>
+    <div id="hud">
+      <div>Speed: <span id="speed">0</span></div>
+      <div>Position: <span id="position">[0.0, 0.0, 0.0]</span></div>
+      <div>Click to start</div>
+    </div>
+    <div id="debug">
+      <div><strong>Input Status:</strong></div>
+      <div>W: <span id="input-w" class="input-status input-inactive">W</span></div>
+      <div>S: <span id="input-s" class="input-status input-inactive">S</span></div>
+      <div>A: <span id="input-a" class="input-status input-inactive">A</span></div>
+      <div>D: <span id="input-d" class="input-status input-inactive">D</span></div>
+      <div>↑: <span id="input-up" class="input-status input-inactive">↑</span></div>
+      <div>↓: <span id="input-down" class="input-status input-inactive">↓</span></div>
+      <div>←: <span id="input-left" class="input-status input-inactive">←</span></div>
+      <div>→: <span id="input-right" class="input-status input-inactive">→</span></div>
+      <div><strong>Events Sent:</strong> <span id="events-sent">0</span></div>
+      <div><strong>Last Event:</strong> <span id="last-event">None</span></div>
+    </div>
+    <canvas id="webgl"></canvas>
+  </body>
+</html> 
