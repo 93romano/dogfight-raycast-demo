@@ -1,10 +1,10 @@
 # 환경변수 (절대 접근 금지)
-.env
-.env.*
-.env.local
-.env.development
-.env.staging
-.env.production
+# .env
+# .env.*
+# .env.local
+# .env.development
+# .env.staging
+# .env.production
 
 # Git 자체
 .git

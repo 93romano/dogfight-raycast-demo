@@ -28,6 +28,7 @@ export type PlayerMovementCallback = (id: string, event: MovementEvent) => void;
 export class SocketManager {
   private socket: WebSocket | null = null;
   private playerId: number | null = null;
+  private username: string | null = null;
   private lastSentState: PlayerState | null = null;
   private lastSentMovement: MovementEvent | null = null;
   private readonly stateThreshold = 0.1; // 위치 변화 임계값
@@ -58,9 +59,13 @@ export class SocketManager {
     // 생성자에서는 연결하지 않음
   }
 
-  public connectWithPlayerId(playerId: number) {
-    this.playerId = playerId;
-    console.log('🎯 Connecting with Player ID:', playerId);
+  /**
+   * Connect with username only - server will assign player ID based on user ID
+   */
+  public connectWithUsername(username: string) {
+    this.username = username;
+    this.playerId = null; // 서버에서 할당받을 예정
+    console.log('🎯 Connecting with Username:', username);
     this.connect();
   }
 
@@ -68,11 +73,13 @@ export class SocketManager {
     try {
       console.log('🔌 Attempting to connect to server...');
       
-      // 사용자가 입력한 Player ID를 쿼리 파라미터로 전달
+      // 사용자명만 쿼리 파라미터로 전달
       const params = new URLSearchParams();
-      params.append('playerId', this.playerId!.toString());
+      if (this.username) {
+        params.append('username', this.username);
+      }
       
-      const wsUrl = `ws://localhost:3000?${params.toString()}`;
+      const wsUrl = `ws://localhost:8080?${params.toString()}`;
       this.socket = new WebSocket(wsUrl);
       
       this.socket.binaryType = 'arraybuffer';
@@ -140,12 +147,15 @@ export class SocketManager {
       
       switch (msg.type) {
         case 'welcome':
-          console.log('🎯 Connected successfully with Player ID:', this.playerId);
+          // 서버에서 할당받은 플레이어 ID 저장
+          this.playerId = msg.playerId;
+          console.log('🎯 Connected successfully with Player ID:', this.playerId, 'Username:', msg.username);
           break;
         case 'player-id-conflict':
-          // ID 충돌 시 처리
-          console.error('❌ Player ID conflict:', msg.message);
-          alert(`플레이어 번호 ${this.playerId}가 이미 사용 중입니다. 다른 번호를 선택해주세요.`);
+        case 'error':
+          // 에러 메시지 처리
+          console.error('❌ Connection error:', msg.message);
+          alert(msg.message);
           this.disconnect();
           break;
         case 'player-joined':
@@ -403,5 +413,9 @@ export class SocketManager {
     if (this.socket) {
       this.socket.close(1000, 'Client disconnect');
     }
+  }
+
+  public getUsername(): string | null {
+    return this.username;
   }
 }

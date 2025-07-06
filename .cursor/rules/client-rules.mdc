@@ -1,0 +1,47 @@
+# Client-Side Development Guidelines
+
+## Three.js and WebGL Best Practices
+- Implement proper resource cleanup and disposal
+- Use efficient geometry and material management
+- Optimize render loops and animations
+- Follow WebGL best practices for performance
+
+## Game Development Standards
+- Implement proper game loop architecture
+- Use delta time for smooth animations
+- Implement proper collision detection
+- Handle window resize events appropriately
+
+## Network Communication
+- Implement proper error handling for network failures
+- Use appropriate state management for multiplayer sync
+- Implement proper reconnection logic
+- Log network events for debugging
+
+## Asset Management
+- Optimize 3D models and textures
+- Implement proper asset loading and caching
+- Use appropriate compression for assets
+- Handle loading states properly
+
+## Performance Guidelines
+- Implement proper memory management
+- Use requestAnimationFrame for animations
+- Optimize render calls and draw operations
+- Monitor and optimize FPS
+
+## Code Organization
+- Separate game logic from rendering logic
+- Use proper component architecture
+- Implement proper event handling system
+- Follow TypeScript best practices
+
+## Testing and Debugging
+- Add proper logging for debugging
+- Implement performance monitoring
+- Add error boundaries where appropriate
+- Write unit tests for critical components
+description:
+globs:
+alwaysApply: false
+---

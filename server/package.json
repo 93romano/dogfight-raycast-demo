@@ -6,12 +6,19 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "worker": "node worker.js",
+    "worker:dev": "node --watch worker.js",
+    "db:init": "psql -h ${POSTGRES_HOST} -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f schema.sql"
   },
   "keywords": ["websocket", "game", "multiplayer", "server"],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ws": "^8.18.2"
+    "ws": "^8.18.2",
+    "pg": "^8.11.3",
+    "ioredis": "^5.3.2",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.3.1"
   }
 } 

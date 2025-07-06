@@ -3,6 +3,13 @@
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { Buffer } from 'buffer';
+import { pgPool, redisClient } from './config/database.js';
+import GameEventService from './services/GameEventService.js';
+import dotenv from 'dotenv';
+dotenv.config();
+
+console.log('🔥 Server started');
+
 
 const httpServer = createServer();
 const wss = new WebSocketServer({ server: httpServer });
@@ -13,7 +20,9 @@ const gameState = {
   lastUpdate: Date.now(),
   tickRate: 60,
   tickInterval: 1000 / 60,
-  lastLogTime: null
+  lastLogTime: null,
+  currentMatchId: null,
+  playerUserMap: new Map() // playerId -> userId 매핑
 };
 
 // Binary protocol constants
@@ -29,6 +38,137 @@ const HEADER_SIZE = 8;
 
 // Player state size
 const PLAYER_STATE_SIZE = 46; // 2 + 12 + 16 + 12 + 4 bytes
+
+// 매치 시작 함수
+async function startMatch() {
+  try {
+    const matchId = await GameEventService.createMatch();
+    gameState.currentMatchId = matchId;
+    console.log(`🎮 New match started with ID: ${matchId}`);
+    
+    // 브로드캐스트 매치 시작
+    const matchStartMessage = JSON.stringify({
+      type: 'match-started',
+      matchId: matchId,
+      timestamp: Date.now()
+    });
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(matchStartMessage);
+      }
+    });
+    
+    return matchId;
+  } catch (error) {
+    console.error('Error starting match:', error);
+    return null;
+  }
+}
+
+// 매치 종료 함수
+async function endMatch() {
+  if (!gameState.currentMatchId) return;
+  
+  try {
+    await GameEventService.endMatch(gameState.currentMatchId);
+    console.log(`🏁 Match ${gameState.currentMatchId} ended`);
+    
+    // 브로드캐스트 매치 종료
+    const matchEndMessage = JSON.stringify({
+      type: 'match-ended',
+      matchId: gameState.currentMatchId,
+      timestamp: Date.now()
+    });
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(matchEndMessage);
+      }
+    });
+    
+    gameState.currentMatchId = null;
+    gameState.playerUserMap.clear();
+  } catch (error) {
+    console.error('Error ending match:', error);
+  }
+}
+
+// 플레이어 킬 처리 함수
+async function handlePlayerKill(attackerId, victimId, damage = 100) {
+  if (!gameState.currentMatchId) return;
+  
+  try {
+    const attackerUserId = gameState.playerUserMap.get(attackerId);
+    const victimUserId = gameState.playerUserMap.get(victimId);
+    
+    if (attackerUserId && victimUserId) {
+      await GameEventService.handlePlayerKill(
+        gameState.currentMatchId,
+        attackerUserId,
+        victimUserId,
+        damage
+      );
+      
+      console.log(`💀 Player ${attackerId} killed Player ${victimId}`);
+      
+      // 킬 이벤트 브로드캐스트
+      const killMessage = JSON.stringify({
+        type: 'player-killed',
+        attackerId: attackerId,
+        victimId: victimId,
+        damage: damage,
+        timestamp: Date.now()
+      });
+      
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(killMessage);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error handling player kill:', error);
+  }
+}
+
+// 플레이어 데미지 처리 함수
+async function handlePlayerDamage(attackerId, victimId, damage) {
+  if (!gameState.currentMatchId) return;
+  
+  try {
+    const attackerUserId = gameState.playerUserMap.get(attackerId);
+    const victimUserId = gameState.playerUserMap.get(victimId);
+    
+    if (attackerUserId && victimUserId) {
+      await GameEventService.handlePlayerDamage(
+        gameState.currentMatchId,
+        attackerUserId,
+        victimUserId,
+        damage
+      );
+      
+      console.log(`💥 Player ${attackerId} damaged Player ${victimId} for ${damage}`);
+      
+      // 데미지 이벤트 브로드캐스트
+      const damageMessage = JSON.stringify({
+        type: 'player-damaged',
+        attackerId: attackerId,
+        victimId: victimId,
+        damage: damage,
+        timestamp: Date.now()
+      });
+      
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(damageMessage);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error handling player damage:', error);
+  }
+}
 
 function createStateUpdateBuffer(players) {
   const buffer = Buffer.alloc(HEADER_SIZE + (players.size * PLAYER_STATE_SIZE));
@@ -80,23 +220,35 @@ function handleMovementEvent(playerId, event, ws) {
     return;
   }
 
+  // 입력 데이터 검증
+  if (!event.input) {
+    console.log(`⚠️ Missing input data for Player ${playerId}`);
+    return;
+  }
+
   console.log(`🎮 Player ${playerId} movement:`, event.input);
 
-  // 입력 상태 업데이트
+  // 입력 상태 업데이트 - 안전한 접근
   player.inputState = {
-    forward: event.input.forward,
-    backward: event.input.backward,
-    left: event.input.left,
-    right: event.input.right,
-    up: event.input.up,
-    down: event.input.down,
-    roll: event.input.roll
+    forward: Boolean(event.input.forward),
+    backward: Boolean(event.input.backward),
+    left: Boolean(event.input.left),
+    right: Boolean(event.input.right),
+    up: Boolean(event.input.up),
+    down: Boolean(event.input.down),
+    roll: Number(event.input.roll) || 0
   };
 
-  // 위치와 회전 업데이트
-  player.position = event.position;
-  player.rotation = event.rotation;
-  player.speed = event.speed;
+  // 위치와 회전 업데이트 - 안전한 접근
+  if (event.position && Array.isArray(event.position)) {
+    player.position = event.position;
+  }
+  if (event.rotation && Array.isArray(event.rotation)) {
+    player.rotation = event.rotation;
+  }
+  if (typeof event.speed === 'number') {
+    player.speed = event.speed;
+  }
 
   // 다른 플레이어들에게 움직임 이벤트 브로드캐스트
   const movementMessage = JSON.stringify({
@@ -122,42 +274,70 @@ function handleMovementEvent(playerId, event, ws) {
   }));
 }
 
-wss.on('connection', (ws, req) => {
-  console.log('�� New connection');
+wss.on('connection', async (ws, req) => {
+  console.log('🔥 New connection');
   
-  // 쿼리 파라미터에서 사용자가 입력한 Player ID 추출
+  // 쿼리 파라미터에서 username만 추출
   const url = new URL(req.url, 'http://localhost');
-  const requestedPlayerId = parseInt(url.searchParams.get('playerId'));
+  const username = url.searchParams.get('username');
   
-  let playerId;
+  if (!username) {
+    console.log('❌ Missing username in connection request');
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: 'Username is required'
+    }));
+    ws.close(1000, 'Missing username');
+    return;
+  }
   
-  // 사용자가 요청한 ID가 유효한지 확인
-  if (requestedPlayerId && requestedPlayerId >= 1 && requestedPlayerId <= 9999) {
-    // ID 충돌 체크
-    if (players.has(requestedPlayerId)) {
-      // 충돌 시 에러 메시지 전송
+  let userId;
+  let playerId; // users 테이블의 id가 playerId가 됨
+  
+  try {
+    // 유저 생성 또는 가져오기 - 이것이 playerId가 됨
+    userId = await GameEventService.createOrGetUser(username);
+    playerId = userId; // users.id를 playerId로 사용
+    
+    console.log(`🎯 Username: ${username}, Assigned Player ID: ${playerId} (User ID: ${userId})`);
+    
+    // 해당 플레이어가 이미 연결되어 있는지 확인
+    if (players.has(playerId)) {
+      console.log(`❌ Player ID ${playerId} (${username}) is already connected`);
       ws.send(JSON.stringify({
-        type: 'player-id-conflict',
-        message: `Player ID ${requestedPlayerId} is already in use`
+        type: 'error',
+        message: `사용자 ${username}가 이미 접속 중입니다.`
       }));
-      ws.close(1000, 'Player ID conflict');
+      ws.close(1000, 'User already connected');
       return;
     }
     
-    playerId = requestedPlayerId;
-    console.log(`🎯 User requested Player ID: ${playerId}`);
-  } else {
-    // 유효하지 않은 ID 요청 시 에러
+    // 매치가 없으면 새 매치 시작
+    if (!gameState.currentMatchId) {
+      await startMatch();
+    }
+    
+    // 매치에 플레이어 추가
+    if (gameState.currentMatchId) {
+      await GameEventService.addPlayerToMatch(gameState.currentMatchId, userId);
+      gameState.playerUserMap.set(playerId, userId);
+    }
+    
+    console.log(`✅ Player ${playerId} (${username}) joined match ${gameState.currentMatchId}`);
+  } catch (error) {
+    console.error('Error setting up player:', error);
     ws.send(JSON.stringify({
-      type: 'player-id-conflict',
-      message: 'Invalid Player ID. Must be between 1-9999.'
+      type: 'error',
+      message: 'Failed to join game: ' + error.message
     }));
-    ws.close(1000, 'Invalid Player ID');
+    ws.close(1000, 'Database error');
     return;
   }
   
   // WebSocket 객체에 정보 저장
   ws.playerId = playerId;
+  ws.userId = userId;
+  ws.username = username;
   
   // 플레이어 상태 생성
   players.set(playerId, {
@@ -188,13 +368,17 @@ wss.on('connection', (ws, req) => {
   // Send welcome message
   ws.send(JSON.stringify({
     type: 'welcome',
-    playerId: playerId
+    playerId: playerId,
+    userId: userId,
+    username: username,
+    matchId: gameState.currentMatchId
   }));
   
   // 다른 플레이어들에게 새 플레이어 참가 알림
   const joinMessage = JSON.stringify({
     type: 'player-joined',
     id: playerId.toString(),
+    username: username,
     state: players.get(playerId)
   });
   
@@ -204,113 +388,76 @@ wss.on('connection', (ws, req) => {
     }
   });
   
-  ws.on('message', (data) => {
-    // 활동 시간 업데이트
-    const now = Date.now();
-    const player = players.get(playerId);
-    if (player) {
-      player.lastActivity = now;
-    }
-    
+  // 메시지 처리
+  ws.on('message', async (message) => {
     try {
-      // Keep-alive 처리
-      if (typeof data === 'string' && data === 'ping') {
+      // ping 메시지는 JSON이 아닐 수 있으므로 먼저 확인
+      if (message.toString() === 'ping') {
         ws.send('pong');
         return;
       }
-
-      // JSON 메시지 처리
-      if (typeof data === 'string') {
-        const message = JSON.parse(data);
-        
-        switch (message.type) {
-          case 'update':
-            const updatePlayerId = message.playerId || playerId;
-            const player = players.get(updatePlayerId);
-            if (player) {
-              // 위치 업데이트 로그 줄임 - 5초마다만
-              if (!player.lastPositionLog || now - player.lastPositionLog > 5000) {
-                console.log(`🔄 Updating player ${updatePlayerId} position:`, message.state.position);
-                player.lastPositionLog = now;
-              }
-              
-              // 플레이어 상태 업데이트
-              player.position = message.state.position;
-              player.rotation = message.state.rotation;
-              
-              // 하이브리드: JSON을 바이너리로 변환해서 브로드캐스트
-              const binaryUpdate = createPlayerUpdateBuffer(updatePlayerId, message.state);
-              
-              let broadcastCount = 0;
-              wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN && client !== ws) {
-                  client.send(binaryUpdate);
-                  broadcastCount++;
-                }
-              });
-              
-              if (broadcastCount > 0) {
-                console.log(`📡 Broadcasted binary position update to ${broadcastCount} other players`);
-              }
-            }
-            break;
-          case 'movement':
-            // 움직임 이벤트는 JSON으로 브로드캐스트 (구조화된 데이터)
-            const eventPlayerId = message.playerId || playerId;
-            const movementMessage = JSON.stringify({
-              type: 'player-movement',
-              playerId: eventPlayerId,
-              event: message.event
-            });
-            
-            let movementBroadcastCount = 0;
-            wss.clients.forEach(client => {
-              if (client.readyState === WebSocket.OPEN && client !== ws) {
-                client.send(movementMessage);
-                movementBroadcastCount++;
-              }
-            });
-            
-            if (movementBroadcastCount > 0) {
-              console.log(`📡 Broadcasted movement event to ${movementBroadcastCount} other players`);
-            }
-            break;
-          default:
-            console.log('Unknown message type:', message.type);
-        }
-      } else if (data instanceof Buffer) {
-        // 기존 바이너리 처리 로직 유지
-        console.log(`📦 Binary data received from player ${playerId}, length:`, data.length);
-        
-        let broadcastCount = 0;
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN && client !== ws) {
-            client.send(data);
-            broadcastCount++;
+      
+      const data = JSON.parse(message);
+      
+      switch (data.type) {
+        case 'movement':
+          handleMovementEvent(playerId, data, ws);
+          break;
+          
+        case 'kill':
+          if (data.victimId && data.victimId !== playerId) {
+            await handlePlayerKill(playerId, data.victimId, data.damage);
           }
-        });
-        
-        if (broadcastCount > 0) {
-          console.log(`📡 Broadcasted binary data to ${broadcastCount} other players`);
-        }
-      } else {
-        console.log(`❓ Unknown data type from player ${playerId}:`, typeof data);
+          break;
+          
+        case 'damage':
+          if (data.victimId && data.victimId !== playerId) {
+            await handlePlayerDamage(playerId, data.victimId, data.damage);
+          }
+          break;
+          
+        case 'ping':
+          ws.send(JSON.stringify({
+            type: 'pong',
+            timestamp: Date.now()
+          }));
+          break;
+          
+        case 'get-stats':
+          if (gameState.currentMatchId) {
+            const stats = await GameEventService.getMatchPlayerStats(gameState.currentMatchId);
+            ws.send(JSON.stringify({
+              type: 'match-stats',
+              stats: stats
+            }));
+          }
+          break;
+          
+        case 'get-rankings':
+          const rankings = await GameEventService.getGlobalRankings();
+          ws.send(JSON.stringify({
+            type: 'global-rankings',
+            rankings: rankings
+          }));
+          break;
       }
     } catch (error) {
       console.error('Error processing message:', error);
     }
   });
   
-  ws.on('close', (code, reason) => {
-    console.log(`🔌 Connection closed for player ${playerId}. Code: ${code}, Reason: ${reason}`);
+  // 연결 종료 처리
+  ws.on('close', () => {
+    console.log(`👋 Player ${playerId} disconnected`);
     
     // 플레이어 제거
     players.delete(playerId);
+    gameState.playerUserMap.delete(playerId);
     
-    // 다른 클라이언트에게 알림
+    // 다른 플레이어들에게 플레이어 퇴장 알림
     const leaveMessage = JSON.stringify({
       type: 'player-left',
-      playerId: playerId
+      id: playerId.toString()
     });
     
     wss.clients.forEach(client => {
@@ -318,93 +465,37 @@ wss.on('connection', (ws, req) => {
         client.send(leaveMessage);
       }
     });
+    
+    // 플레이어가 모두 나가면 매치 종료
+    if (players.size === 0 && gameState.currentMatchId) {
+      endMatch();
+    }
   });
-
+  
+  // 에러 처리
   ws.on('error', (error) => {
-    console.error(`WebSocket error for player ${playerId}:`, error);
+    console.error('WebSocket error:', error);
   });
 });
 
-// 연결 상태 모니터링 (선택사항)
-setInterval(() => {
-  const now = Date.now();
-  const inactiveThreshold = 5 * 60 * 1000; // 5분
+// 서버 시작
+const PORT = process.env.PORT || 8080;
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
+// 종료 처리
+process.on('SIGINT', async () => {
+  console.log('Shutting down server...');
   
-  for (const [id, player] of players) {
-    if (now - player.lastActivity > inactiveThreshold) {
-      console.log(`⏰ Player ${id} inactive for ${Math.floor((now - player.lastActivity) / 1000)}s`);
-      // 여기서는 연결을 끊지 않고 로그만 남김
-    }
+  // 현재 매치 종료
+  if (gameState.currentMatchId) {
+    await endMatch();
   }
-}, 60000); // 1분마다 체크
-
-// Game loop 개선 - 로그 빈도 줄임
-setInterval(() => {
-  const now = Date.now();
-  if (now - gameState.lastUpdate >= gameState.tickInterval) {
-    gameState.lastUpdate = now;
-    
-    // 모든 플레이어 상태를 바이너리로 브로드캐스트
-    const stateBuffer = createStateUpdateBuffer(players);
-    let broadcastCount = 0;
-    
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(stateBuffer);
-        broadcastCount++;
-      }
-    });
-    
-    // 로그 빈도 줄임 - 10초마다만 출력
-    if (broadcastCount > 0 && players.size > 0) {
-      if (!gameState.lastLogTime || now - gameState.lastLogTime > 10000) {
-        console.log(`📡 Broadcasted state to ${broadcastCount} clients (${players.size} players)`);
-        gameState.lastLogTime = now;
-      }
-    }
-  }
-}, 1);
-
-// 새로운 함수: 개별 플레이어 업데이트를 바이너리로 변환
-function createPlayerUpdateBuffer(playerId, state) {
-  const buffer = Buffer.alloc(HEADER_SIZE + PLAYER_STATE_SIZE);
-  let offset = HEADER_SIZE;
   
-  // Write header
-  buffer.writeUInt16BE(0, 0); // Sequence number
-  buffer.writeUInt8(PACKET_TYPES.STATE_UPDATE, 2); // Packet type
-  buffer.writeUInt32BE(Date.now(), 3); // Timestamp
-  buffer.writeUInt8(0, 7); // Flags
+  // 연결 종료
+  await pgPool.end();
+  await redisClient.quit();
   
-  // Write player ID
-  buffer.writeUInt16BE(parseInt(playerId), offset);
-  offset += 2;
-  
-  // Write position (3x float32)
-  buffer.writeFloatBE(state.position[0], offset);
-  buffer.writeFloatBE(state.position[1], offset + 4);
-  buffer.writeFloatBE(state.position[2], offset + 8);
-  offset += 12;
-  
-  // Write rotation (4x float32)
-  buffer.writeFloatBE(state.rotation[0], offset);
-  buffer.writeFloatBE(state.rotation[1], offset + 4);
-  buffer.writeFloatBE(state.rotation[2], offset + 8);
-  buffer.writeFloatBE(state.rotation[3], offset + 12);
-  offset += 16;
-  
-  // Write velocity (3x float32) - zeros
-  buffer.writeFloatBE(0, offset);
-  buffer.writeFloatBE(0, offset + 4);
-  buffer.writeFloatBE(0, offset + 8);
-  offset += 12;
-  
-  // Write input state (4 bytes) - zeros
-  buffer.writeUInt32BE(0, offset);
-  
-  return buffer;
-}
-
-httpServer.listen(3000, () => {
-  console.log('🚀 Zero-lag FPS server running on http://localhost:3000');
+  process.exit(0);
 });

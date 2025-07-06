@@ -4,7 +4,7 @@ import path from 'path'
 export default defineConfig({
   assetsInclude: ['**/*.glb', '**/*.jpg'], // 3D 모델과 이미지 파일 포함
   server: {
-    port: 8080  // 포트 다시 8080으로 설정
+    port: 8000  // 포트 다시 8080으로 설정
   },
   build: {
     assetsDir: 'assets',

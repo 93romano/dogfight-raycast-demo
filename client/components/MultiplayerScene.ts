@@ -38,9 +38,9 @@ export class MultiplayerScene {
 
   private speed = 0;
   private readonly minSpeed = 0;
-  private readonly maxSpeed = 700;
-  private readonly accel = 5;
-  private readonly decel = 3;
+  private readonly maxSpeed = 700; // 100
+  private readonly accel = 5; // 가속도 (프레임당 증가량)
+  private readonly decel = 3; // 감속도 (프레임당 감소량)
 
   private lastStateUpdate = 0;
   private readonly stateUpdateInterval = 1000 / 10; // 20Hz → 10Hz로 줄임
@@ -228,32 +228,113 @@ export class MultiplayerScene {
   }
 
   private showPlayerIdInput() {
-    this.playerIdInput = new PlayerIdInput((playerId: number) => {
-      console.log('🎯 Player ID submitted:', playerId);
-      this.initializeSocket(playerId);
+    this.playerIdInput = new PlayerIdInput({
+      onAuthentication: async (username: string) => {
+        console.log('🎯 Username submitted:', username);
+        
+        try {
+          await this.initializeSocket(username);
+          
+          return {
+            success: true,
+            username: username
+          };
+        } catch (error) {
+          console.error('Authentication failed:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : '서버 연결에 실패했습니다.'
+          };
+        }
+      },
+      onError: (error: Error) => {
+        console.error('🚨 Authentication error:', error);
+        this.showError('인증 중 오류가 발생했습니다: ' + error.message);
+      }
     });
   }
 
-  private initializeSocket(playerId: number) {
-    console.log('🔌 Initializing socket with Player ID:', playerId);
+  private async initializeSocket(username: string): Promise<void> {
+    console.log('🔌 Initializing socket with Username:', username);
     
-    this.socket = new SocketManager(
-      (id, state) => this.addRemotePlayer(id, state),
-      (id, state) => this.updateRemotePlayer(id, state),
-      (id) => this.removeRemotePlayer(id),
-      (players) => {
-        console.log('📋 Received all players:', players);
-        Object.entries(players).forEach(([id, state]) => {
-          if (id !== playerId.toString()) {
-            this.addRemotePlayer(id, state);
-          }
-        });
-      },
-      (id, event) => this.handleRemotePlayerMovement(id, event)
-    );
+    return new Promise((resolve, reject) => {
+      this.socket = new SocketManager(
+        (id, state) => this.addRemotePlayer(id, state),
+        (id, state) => this.updateRemotePlayer(id, state),
+        (id) => this.removeRemotePlayer(id),
+        (players) => {
+          console.log('📋 Received all players:', players);
+          Object.entries(players).forEach(([id, state]) => {
+            // 내 플레이어 ID와 다른 경우에만 추가
+            if (this.socket && id !== this.socket.getPlayerId()?.toString()) {
+              this.addRemotePlayer(id, state);
+            }
+          });
+          resolve(); // 연결 성공
+        },
+        (id, event) => this.handleRemotePlayerMovement(id, event)
+      );
 
-    // 사용자가 입력한 Player ID로 연결
-    this.socket.connectWithPlayerId(playerId);
+      // WebSocket 이벤트 리스너 추가
+      const originalConnect = this.socket.connectWithUsername.bind(this.socket);
+      
+      // 연결 성공 감지를 위한 임시 해결책
+      const checkConnection = () => {
+        if (this.socket?.isConnected() && this.socket?.getPlayerId()) {
+          console.log('🎯 Socket connected successfully with Player ID:', this.socket.getPlayerId());
+          resolve();
+        } else {
+          setTimeout(checkConnection, 100);
+        }
+      };
+
+      try {
+        this.socket.connectWithUsername(username);
+        
+        // 연결 확인 시작
+        setTimeout(checkConnection, 100);
+        
+        // 연결 타임아웃 설정
+        setTimeout(() => {
+          if (!this.socket?.isConnected() || !this.socket?.getPlayerId()) {
+            reject(new Error('서버 연결 시간이 초과되었습니다.'));
+          }
+        }, 10000); // 10초 타임아웃
+        
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * 에러 메시지를 사용자에게 표시합니다
+   */
+  private showError(message: string): void {
+    // 간단한 에러 표시 (추후 더 나은 UI로 개선 가능)
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 0, 0, 0.9);
+      color: white;
+      padding: 15px;
+      border-radius: 5px;
+      z-index: 2000;
+      max-width: 300px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    `;
+    errorDiv.textContent = message;
+    document.body.appendChild(errorDiv);
+    
+    // 5초 후 자동 제거
+    setTimeout(() => {
+      if (errorDiv.parentNode) {
+        errorDiv.parentNode.removeChild(errorDiv);
+      }
+    }, 5000);
   }
 
   private initPointerLock() {
@@ -310,7 +391,7 @@ export class MultiplayerScene {
         }
       });
       
-      mesh.scale.set(0.5, 0.5, 0.5);
+      mesh.scale.set(0.5, 0.5, 0.5); // 1,1,1
       mesh.position.fromArray(state.position);
       mesh.quaternion.fromArray(state.rotation);
       

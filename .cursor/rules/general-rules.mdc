@@ -1,0 +1,42 @@
+# General Development Guidelines
+
+## Senior Developer Standards
+- Approach all tasks with a senior developer's perspective
+- Consider edge cases and potential failure points
+- Review and refactor code for optimal performance and maintainability
+- Document architectural decisions and their rationale
+
+## Documentation Requirements
+- Include references to all external resources used (documentation, articles, libraries)
+- Document any assumptions made during implementation
+- Add JSDoc/TSDoc comments for all functions and classes
+- Maintain a changelog for significant changes
+
+## Code Quality Standards
+- Prioritize code accuracy over development speed
+- Write comprehensive error handling
+- Include type definitions and validations
+- Write self-documenting code with clear variable and function names
+
+## Development Process
+- Always include 'use context7' in prompts for consistent development
+- Document the intent and reasoning behind code changes
+- Preserve existing code as comments when making modifications
+- Add TODO comments for future improvements or technical debt
+
+## Maintainability Guidelines
+- Follow SOLID principles
+- Keep functions small and focused
+- Use dependency injection where appropriate
+- Implement proper separation of concerns
+- Write modular and reusable code
+
+## Version Control
+- Write clear and descriptive commit messages
+- Reference related issues or documentation in commits
+- Keep commits focused and atomic
+- Review changes before committing
+description:
+globs:
+alwaysApply: false
+---
