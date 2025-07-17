@@ -82,16 +82,17 @@ class GameEventService {
         [matchId]
       );
 
-      // 유저별 누적 통계 업데이트
+      // 유저별 누적 통계 업데이트 (같은 유저의 중복 엔트리들을 합계로 처리)
       await client.query(`
         INSERT INTO rankings (user_id, total_kills, total_deaths, total_score)
         SELECT 
           mp.user_id,
-          mp.kills,
-          mp.deaths,
-          mp.score
+          SUM(mp.kills) as total_kills,
+          SUM(mp.deaths) as total_deaths,
+          SUM(mp.score) as total_score
         FROM match_players mp
         WHERE mp.match_id = $1
+        GROUP BY mp.user_id
         ON CONFLICT (user_id) DO UPDATE SET
           total_kills = rankings.total_kills + EXCLUDED.total_kills,
           total_deaths = rankings.total_deaths + EXCLUDED.total_deaths,

@@ -24,6 +24,8 @@ export interface MovementEvent {
 export type PlayerUpdateCallback = (id: string, state: PlayerState) => void;
 export type PlayerLeaveCallback = (id: string) => void;
 export type PlayerMovementCallback = (id: string, event: MovementEvent) => void;
+export type PlayerHitCallback = (attackerId: string, victimId: string, damage: number, victimHealth: number) => void;
+export type PlayerDeathCallback = (victimId: string, attackerId: string, respawnPosition: number[]) => void;
 
 export class SocketManager {
   private socket: WebSocket | null = null;
@@ -40,8 +42,12 @@ export class SocketManager {
   private reconnectDelay = 500;
   private keepAliveInterval: number | null = null;
   private keepAliveTimeout: number | null = null;
-  private readonly keepAliveIntervalMs = 15000; // 15초마다 ping (더 자주)
-  private readonly keepAliveTimeoutMs = 3000;   // 3초 타임아웃 (더 짧게)
+  private readonly keepAliveIntervalMs = 120000; // 2분마다 ping
+  private readonly keepAliveTimeoutMs = 10000;   // 10초 타임아웃
+  
+  // 연속 ping 실패 카운트 (1번 실패하면 재연결)
+  private consecutivePingFailures = 0;
+  private readonly maxConsecutivePingFailures = 1; // 1번 실패 시 재연결
 
   // 로그 제어를 위한 변수들 추가
   private lastLogTime = 0;
@@ -54,7 +60,9 @@ export class SocketManager {
     private onUpdate: PlayerUpdateCallback,
     private onLeave: PlayerLeaveCallback,
     private onInitAll: (players: Record<string, PlayerState>) => void,
-    private onMovement: PlayerMovementCallback
+    private onMovement: PlayerMovementCallback,
+    private onHit?: PlayerHitCallback,
+    private onDeath?: PlayerDeathCallback
   ) {
     // 생성자에서는 연결하지 않음
   }
@@ -96,6 +104,7 @@ export class SocketManager {
     this.socket.onopen = () => {
       console.log('✅ Connected to server');
       this.reconnectAttempts = 0;
+      this.consecutivePingFailures = 0; // 연결 성공 시 ping 실패 카운트 리셋
       this.startKeepAlive();
     };
 
@@ -103,6 +112,7 @@ export class SocketManager {
       // Keep-alive 응답 처리
       if (event.data === 'pong') {
         console.log('🏓 Received pong from server');
+        this.consecutivePingFailures = 0; // 성공 시 실패 카운트 리셋
         this.resetKeepAliveTimeout();
         return;
       }
@@ -175,6 +185,18 @@ export class SocketManager {
           break;
         case 'movement-ack':
           // 로그 제거 - 너무 자주 발생
+          break;
+        case 'player-hit':
+          // 피격 이벤트 처리
+          if (this.onHit) {
+            this.onHit(msg.attackerId.toString(), msg.victimId.toString(), msg.damage, msg.victimHealth);
+          }
+          break;
+        case 'player-death':
+          // 사망 이벤트 처리
+          if (this.onDeath) {
+            this.onDeath(msg.victimId.toString(), msg.attackerId.toString(), msg.respawnPosition);
+          }
           break;
         default:
           if (!this.lastLogTime || now - this.lastLogTime > this.logInterval) {
@@ -310,6 +332,7 @@ export class SocketManager {
       clearTimeout(this.keepAliveTimeout);
       this.keepAliveTimeout = null;
     }
+    this.consecutivePingFailures = 0; // keep-alive 중단 시 카운터 리셋
   }
 
   private resetKeepAliveTimeout() {
@@ -318,8 +341,16 @@ export class SocketManager {
     }
     
     this.keepAliveTimeout = setTimeout(() => {
-      console.log('⏰ Keep-alive timeout - reconnecting');
-      this.reconnect();
+      this.consecutivePingFailures++;
+      console.log(`⏰ Keep-alive timeout (${this.consecutivePingFailures}/${this.maxConsecutivePingFailures})`);
+      
+      if (this.consecutivePingFailures >= this.maxConsecutivePingFailures) {
+        console.log('❌ Too many consecutive ping failures - reconnecting');
+        this.consecutivePingFailures = 0; // 리셋
+        this.reconnect();
+      } else {
+        console.log('⏳ Waiting for next ping cycle...');
+      }
     }, this.keepAliveTimeoutMs) as any;
   }
 
@@ -373,6 +404,25 @@ export class SocketManager {
       playerId: this.playerId 
     }));
     this.lastSentMovement = { ...event };
+  }
+
+  public sendHit(victimId: number, damage: number, position: number[], distance: number) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.log('❌ Cannot send hit: socket not connected');
+      return;
+    }
+
+    const hitData = {
+      type: 'hit',
+      victimId: victimId,
+      damage: damage,
+      position: position,
+      distance: distance,
+      timestamp: Date.now()
+    };
+
+    console.log('🔫 Sending hit event:', hitData);
+    this.socket.send(JSON.stringify(hitData));
   }
 
   private hasStateChanged(newState: PlayerState): boolean {

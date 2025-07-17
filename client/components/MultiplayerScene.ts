@@ -75,7 +75,20 @@ export class MultiplayerScene {
   private lastPosition: THREE.Vector3 = new THREE.Vector3();
   private lastRotation: THREE.Quaternion = new THREE.Quaternion();
   private positionChangeThreshold = 0.5; // 0.1 → 0.5로 늘림 (더 큰 변화만 감지)
-  private rotationChangeThreshold = 0.05; // 0.01 → 0.05로 늘림
+  private rotationChangeThreshold = 0.05;
+
+  // 사격 시스템 관련 변수
+  private raycaster: THREE.Raycaster = new THREE.Raycaster();
+  private lastShotTime = 0;
+  private readonly shotCooldown = 500; // 0.5초 (1초에 2발)
+  private readonly maxShotRange = 1000; // 최대 사격 거리
+  
+  // 체력 시스템
+  private health = 100;
+  private readonly maxHealth = 100;
+  
+  // 로그 제어 변수
+  private lastLogTime = 0; // 0.01 → 0.05로 늘림
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -94,6 +107,11 @@ export class MultiplayerScene {
     this.initEvents();
     this.initEnvironment();
     this.loadPlaneModel();
+
+    // 초기 체력 UI 설정
+    setTimeout(() => {
+      this.updateHealthUI();
+    }, 100);
 
     window.addEventListener('resize', this.onResize);
   }
@@ -272,7 +290,9 @@ export class MultiplayerScene {
           });
           resolve(); // 연결 성공
         },
-        (id, event) => this.handleRemotePlayerMovement(id, event)
+        (id, event) => this.handleRemotePlayerMovement(id, event),
+        (attackerId, victimId, damage, victimHealth) => this.handlePlayerHit(attackerId, victimId, damage, victimHealth),
+        (victimId, attackerId, respawnPosition) => this.handlePlayerDeath(victimId, attackerId, respawnPosition)
       );
 
       // WebSocket 이벤트 리스너 추가
@@ -360,6 +380,24 @@ export class MultiplayerScene {
   private initEvents() {
     document.addEventListener('keydown', (e) => this.keys.add(e.code));
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    
+    // 마우스 클릭으로 사격
+    document.addEventListener('click', (event) => {
+      if (this.isPointerLocked) {
+        this.shoot();
+      }
+    });
+    
+    // 마우스 움직임 처리 (기존 포인터락 시스템과 통합)
+    document.addEventListener('mousemove', (event) => {
+      if (this.isPointerLocked) {
+        this.targetYaw -= event.movementX * this.mouseSensitivity;
+        this.targetPitch -= event.movementY * this.mouseSensitivity;
+        
+        const pitchLimit = Math.PI / 2 - 0.01;
+        this.targetPitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.targetPitch));
+      }
+    });
   }
 
   private async addRemotePlayer(id: string, state: PlayerState) {
@@ -620,6 +658,91 @@ export class MultiplayerScene {
     }
   }
 
+  // 사격 시스템
+  private shoot() {
+    const now = performance.now();
+    
+    // 연사 제한 체크 (1초에 2발)
+    if (now - this.lastShotTime < this.shotCooldown) {
+      console.log(`🚫 Shot cooldown: ${Math.round(this.shotCooldown - (now - this.lastShotTime))}ms remaining`);
+      return;
+    }
+    
+    if (!this.localPlane || !this.socket) {
+      console.log('❌ Cannot shoot: localPlane or socket not available');
+      return;
+    }
+    
+    // 카메라 위치와 방향으로 raycasting
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    
+    this.raycaster.set(this.camera.position, direction);
+    
+    // 다른 플레이어들을 대상으로 raycasting
+    const targets: THREE.Object3D[] = [];
+    this.otherPlayers.forEach((player) => {
+      targets.push(player);
+    });
+    
+    const intersects = this.raycaster.intersectObjects(targets, true);
+    
+    this.lastShotTime = now;
+    console.log(`🔫 Shooting from position: [${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}]`);
+    
+    if (intersects.length > 0) {
+      const target = intersects[0];
+      const distance = target.distance;
+      
+      if (distance <= this.maxShotRange) {
+        // 타겟이 된 플레이어 찾기
+        let targetPlayerId: string | null = null;
+        for (const [playerId, playerMesh] of this.otherPlayers) {
+          if (target.object.parent === playerMesh || target.object === playerMesh) {
+            targetPlayerId = playerId;
+            break;
+          }
+        }
+        
+        if (targetPlayerId) {
+          console.log(`🎯 Hit target! Player ID: ${targetPlayerId}, Distance: ${distance.toFixed(2)}m`);
+          
+          // 서버로 피격 이벤트 전송
+          this.socket.sendHit(
+            parseInt(targetPlayerId),
+            10,
+            target.point.toArray(),
+            distance
+          );
+          
+          // 시각적 피드백 (히트 마커)
+          this.showHitMarker(target.point);
+        }
+      } else {
+        console.log(`🚫 Target too far: ${distance.toFixed(2)}m (max: ${this.maxShotRange}m)`);
+      }
+    } else {
+      console.log(`💨 Shot missed - no targets in range`);
+    }
+  }
+  
+  // 히트 마커 표시
+  private showHitMarker(position: THREE.Vector3) {
+    const geometry = new THREE.SphereGeometry(0.5, 8, 8);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const marker = new THREE.Mesh(geometry, material);
+    
+    marker.position.copy(position);
+    this.scene.add(marker);
+    
+    // 1초 후 제거
+    setTimeout(() => {
+      this.scene.remove(marker);
+      geometry.dispose();
+      material.dispose();
+    }, 1000);
+  }
+
   private onResize = () => {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -650,6 +773,78 @@ export class MultiplayerScene {
 
     this.renderer.render(this.scene, this.camera);
   };
+
+  // 체력 UI 업데이트
+  private updateHealthUI() {
+    const healthFill = document.getElementById('health-fill');
+    const healthText = document.getElementById('health-text');
+    
+    if (healthFill && healthText) {
+      const healthPercentage = (this.health / this.maxHealth) * 100;
+      healthFill.style.width = `${healthPercentage}%`;
+      healthText.textContent = `${this.health}/${this.maxHealth}`;
+      
+      // 체력에 따른 색상 변경
+      if (healthPercentage > 60) {
+        healthFill.style.background = '#4CAF50'; // 녹색
+      } else if (healthPercentage > 30) {
+        healthFill.style.background = '#FFC107'; // 노란색
+      } else {
+        healthFill.style.background = '#F44336'; // 빨간색
+      }
+    }
+  }
+  
+  // 피격 처리
+  public takeDamage(damage: number) {
+    this.health = Math.max(0, this.health - damage);
+    this.updateHealthUI();
+    
+    console.log(`💔 Took ${damage} damage! Health: ${this.health}/${this.maxHealth}`);
+    
+    // 피격 시각적 효과
+    this.showDamageEffect();
+    
+    if (this.health <= 0) {
+      console.log('💀 Player died!');
+      this.handleLocalPlayerDeath();
+    }
+  }
+  
+  // 피격 시각적 효과
+  private showDamageEffect() {
+    // 화면 가장자리 빨간색 효과
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '9999';
+    
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+      document.body.removeChild(overlay);
+    }, 200);
+  }
+  
+  // 로컬 플레이어 사망 처리
+  private handleLocalPlayerDeath() {
+    // 사망 시 위치 리셋
+    if (this.localPlane) {
+      this.localPlane.position.set(0, 10, 0);
+      this.localPlane.quaternion.set(0, 0, 0, 1);
+    }
+    
+    // 체력 회복
+    this.health = this.maxHealth;
+    this.updateHealthUI();
+    
+    console.log('🔄 Respawned with full health');
+  }
 
   public getSpeed(): number {
     return this.physics.velocity.length();
@@ -685,5 +880,78 @@ export class MultiplayerScene {
         speed: event.speed
       });
     }
+  }
+
+  // 피격 이벤트 처리
+  private handlePlayerHit(attackerId: string, victimId: string, damage: number, victimHealth: number) {
+    console.log(`🎯 Player ${attackerId} hit Player ${victimId} for ${damage} damage! Victim health: ${victimHealth}`);
+    
+    // 내가 피격당한 경우
+    if (this.socket && victimId === this.socket.getPlayerId()?.toString()) {
+      this.takeDamage(damage);
+    }
+    
+    // 다른 플레이어의 피격 표시 (선택사항)
+    const victimMesh = this.otherPlayers.get(victimId);
+    if (victimMesh) {
+      // 피격 시각적 효과 (빨간색 깜빡임)
+      this.showPlayerHitEffect(victimMesh);
+    }
+  }
+
+  // 사망 이벤트 처리 (서버로부터)
+  private handlePlayerDeath(victimId: string, attackerId: string, respawnPosition: number[]) {
+    console.log(`💀 Player ${victimId} was killed by Player ${attackerId}`);
+    
+    // 사망한 플레이어의 위치를 리스폰 위치로 업데이트
+    const victimMesh = this.otherPlayers.get(victimId);
+    if (victimMesh) {
+      victimMesh.position.fromArray(respawnPosition);
+      victimMesh.quaternion.set(0, 0, 0, 1);
+    }
+    
+    // 내가 죽은 경우는 이미 takeDamage에서 처리됨
+  }
+
+  // 플레이어 피격 시각적 효과
+  private showPlayerHitEffect(playerMesh: THREE.Group) {
+    // 원래 색상 저장
+    const originalColors: THREE.Color[] = [];
+    
+    playerMesh.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat, index) => {
+            originalColors.push(mat.color.clone());
+            mat.color.setHex(0xff0000); // 빨간색으로 변경
+          });
+        } else {
+          originalColors.push(child.material.color.clone());
+          child.material.color.setHex(0xff0000); // 빨간색으로 변경
+        }
+      }
+    });
+    
+    // 200ms 후 원래 색상으로 복원
+    setTimeout(() => {
+      let colorIndex = 0;
+      playerMesh.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((mat) => {
+              if (originalColors[colorIndex]) {
+                mat.color.copy(originalColors[colorIndex]);
+                colorIndex++;
+              }
+            });
+          } else {
+            if (originalColors[colorIndex]) {
+              child.material.color.copy(originalColors[colorIndex]);
+              colorIndex++;
+            }
+          }
+        }
+      });
+    }, 200);
   }
 }

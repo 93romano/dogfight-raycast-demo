@@ -53,12 +53,49 @@
       .input-inactive {
         background-color: #666;
       }
+      
+      /* 체력바 스타일 */
+      .health-container {
+        margin-top: 10px;
+      }
+      .health-bar {
+        width: 200px;
+        height: 20px;
+        border: 2px solid #fff;
+        border-radius: 10px;
+        overflow: hidden;
+        background-color: #333;
+        position: relative;
+      }
+      .health-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4CAF50 0%, #FFC107 50%, #F44336 100%);
+        transition: width 0.3s ease;
+      }
+      .health-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-weight: bold;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.7);
+        font-size: 12px;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
     <div id="hud">
       <div>Speed: <span id="speed">0</span></div>
       <div>Position: <span id="position">[0.0, 0.0, 0.0]</span></div>
+      <div class="health-container">
+        <div>Health:</div>
+        <div class="health-bar">
+          <div id="health-fill" class="health-fill" style="width: 100%;"></div>
+          <div id="health-text" class="health-text">100/100</div>
+        </div>
+      </div>
       <div>Click to start</div>
     </div>
     <div id="debug">

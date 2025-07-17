@@ -25,6 +25,34 @@ const gameState = {
   playerUserMap: new Map() // playerId -> userId 매핑
 };
 
+// 비활성 사용자 관리
+const INACTIVE_TIMEOUT = 120000; // 2분 (120초)
+const activeConnections = new Map(); // playerId -> { ws, lastActivity }
+
+// 비활성 사용자 체크 및 제거
+function checkInactiveUsers() {
+  const now = Date.now();
+  
+  for (const [playerId, connection] of activeConnections) {
+    if (now - connection.lastActivity > INACTIVE_TIMEOUT) {
+      console.log(`⏰ Player ${playerId} inactive for ${Math.round((now - connection.lastActivity) / 1000)}s - disconnecting`);
+      
+      // 연결 강제 종료
+      if (connection.ws && connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.close(1000, 'Inactive timeout');
+      }
+      
+      // 정리 (close 이벤트에서도 처리되지만 안전장치)
+      activeConnections.delete(playerId);
+      players.delete(playerId);
+      gameState.playerUserMap.delete(playerId);
+    }
+  }
+}
+
+// 30초마다 비활성 사용자 체크
+setInterval(checkInactiveUsers, 30000);
+
 // Binary protocol constants
 const PACKET_TYPES = {
   STATE_UPDATE: 0x01,
@@ -129,6 +157,93 @@ async function handlePlayerKill(attackerId, victimId, damage = 100) {
     }
   } catch (error) {
     console.error('Error handling player kill:', error);
+  }
+}
+
+// 플레이어 피격 처리 함수 (체력 시스템 포함)
+async function handlePlayerHit(attackerId, victimId, damage, position, distance) {
+  if (!gameState.currentMatchId) return;
+  
+  try {
+    const attacker = players.get(attackerId);
+    const victim = players.get(victimId);
+    
+    if (!attacker || !victim) {
+      console.log(`⚠️ Player not found: attacker=${attackerId}, victim=${victimId}`);
+      return;
+    }
+    
+    // 연사 제한 검증
+    const now = Date.now();
+    if (now - attacker.lastShotTime < attacker.shotCooldown) {
+      console.log(`🚫 Shot rejected: Player ${attackerId} shooting too fast`);
+      return;
+    }
+    
+    attacker.lastShotTime = now;
+    
+    // 피해자 체력 감소
+    victim.health = Math.max(0, victim.health - damage);
+    
+    console.log(`🎯 Player ${attackerId} hit Player ${victimId} for ${damage} damage! Victim health: ${victim.health}/${victim.maxHealth}`);
+    
+    // 모든 클라이언트에게 피격 이벤트 브로드캐스트
+    const hitMessage = JSON.stringify({
+      type: 'player-hit',
+      attackerId: attackerId,
+      victimId: victimId,
+      damage: damage,
+      victimHealth: victim.health,
+      position: position,
+      distance: distance,
+      timestamp: now
+    });
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(hitMessage);
+      }
+    });
+    
+    // 사망 처리
+    if (victim.health <= 0) {
+      console.log(`💀 Player ${victimId} was killed by Player ${attackerId}`);
+      
+      // 킬/데스 이벤트를 Redis에 저장 (사망 시에만)
+      const attackerUserId = gameState.playerUserMap.get(attackerId);
+      const victimUserId = gameState.playerUserMap.get(victimId);
+      
+      if (attackerUserId && victimUserId) {
+        await GameEventService.handlePlayerKill(
+          gameState.currentMatchId,
+          attackerUserId,
+          victimUserId,
+          damage
+        );
+      }
+      
+      // 플레이어 리스폰
+      victim.health = victim.maxHealth;
+      victim.position = [0, 10, 0]; // 리스폰 위치
+      victim.rotation = [0, 0, 0, 1];
+      
+      // 사망/리스폰 이벤트 브로드캐스트
+      const deathMessage = JSON.stringify({
+        type: 'player-death',
+        victimId: victimId,
+        attackerId: attackerId,
+        respawnPosition: victim.position,
+        timestamp: now
+      });
+      
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(deathMessage);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error handling player hit:', error);
   }
 }
 
@@ -339,6 +454,12 @@ wss.on('connection', async (ws, req) => {
   ws.userId = userId;
   ws.username = username;
   
+  // 활성 연결 목록에 추가
+  activeConnections.set(playerId, {
+    ws: ws,
+    lastActivity: Date.now()
+  });
+  
   // 플레이어 상태 생성
   players.set(playerId, {
     position: [0, 0, 0],
@@ -359,7 +480,12 @@ wss.on('connection', async (ws, req) => {
     lastPingLog: null,
     lastPositionLog: null,
     lastBroadcastLog: null,
-    lastMovementLog: null
+    lastMovementLog: null,
+    // 체력 시스템 추가
+    health: 100,
+    maxHealth: 100,
+    lastShotTime: 0,
+    shotCooldown: 500 // 0.5초
   });
   
   // Send initial state
@@ -391,6 +517,12 @@ wss.on('connection', async (ws, req) => {
   // 메시지 처리
   ws.on('message', async (message) => {
     try {
+      // 활동 시간 업데이트
+      const connection = activeConnections.get(playerId);
+      if (connection) {
+        connection.lastActivity = Date.now();
+      }
+      
       // ping 메시지는 JSON이 아닐 수 있으므로 먼저 확인
       if (message.toString() === 'ping') {
         ws.send('pong');
@@ -402,6 +534,12 @@ wss.on('connection', async (ws, req) => {
       switch (data.type) {
         case 'movement':
           handleMovementEvent(playerId, data, ws);
+          break;
+          
+        case 'hit':
+          if (data.victimId && data.victimId !== playerId) {
+            await handlePlayerHit(playerId, data.victimId, data.damage, data.position, data.distance);
+          }
           break;
           
         case 'kill':
@@ -453,6 +591,7 @@ wss.on('connection', async (ws, req) => {
     // 플레이어 제거
     players.delete(playerId);
     gameState.playerUserMap.delete(playerId);
+    activeConnections.delete(playerId); // 활성 연결 목록에서도 제거
     
     // 다른 플레이어들에게 플레이어 퇴장 알림
     const leaveMessage = JSON.stringify({
