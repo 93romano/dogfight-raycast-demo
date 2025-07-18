@@ -83,6 +83,83 @@
         font-size: 12px;
         pointer-events: none;
       }
+      
+      /* 조준점 스타일 개선 */
+      #crosshair {
+        animation: crosshairPulse 2s ease-in-out infinite;
+      }
+      
+      @keyframes crosshairPulse {
+        0%, 100% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+        50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+      }
+      
+      /* 총구 화염 효과를 위한 CSS */
+      .muzzle-flash-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at center, rgba(255, 255, 0, 0.3) 0%, transparent 20%);
+        pointer-events: none;
+        z-index: 500;
+        animation: muzzleFlash 0.1s ease-out;
+      }
+      
+      @keyframes muzzleFlash {
+        0% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      
+      /* 피격 시 화면 효과 개선 */
+      .damage-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at center, transparent 50%, rgba(255, 0, 0, 0.4) 100%);
+        pointer-events: none;
+        z-index: 600;
+        animation: damageFlash 0.3s ease-out;
+      }
+      
+      @keyframes damageFlash {
+        0% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      
+      /* 게임 시작 전 오버레이 */
+      .game-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        color: white;
+        font-family: Arial, sans-serif;
+        font-size: 24px;
+        text-align: center;
+      }
+      
+      /* HUD 개선 */
+      #hud {
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+      
+      #debug {
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
     </style>
   </head>
   <body>
@@ -96,6 +173,8 @@
           <div id="health-text" class="health-text">100/100</div>
         </div>
       </div>
+      <div>Weapon: <span id="weapon-status">Ready</span></div>
+      <div>Shots Fired: <span id="shots-fired">0</span></div>
       <div>Click to start</div>
     </div>
     <div id="debug">

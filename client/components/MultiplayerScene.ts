@@ -5,11 +5,104 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SocketManager, PlayerState, MovementEvent } from '../network/SocketManager';
 import { PlayerIdInput } from './PlayerIdInput';
 
+// 물리 상태 인터페이스
 interface PhysicsState {
   velocity: THREE.Vector3;
   angularVelocity: THREE.Vector3;
   lift: number;
   drag: number;
+}
+
+// 시각적 총알 클래스
+class VisualBullet {
+  private mesh: THREE.Mesh;
+  private velocity: THREE.Vector3;
+  private lifeTime: number = 0;
+  private maxLifeTime: number = 2; // 2초
+  private scene: THREE.Scene;
+  private trail: THREE.Mesh[] = [];
+  private readonly trailLength = 10;
+
+  constructor(startPosition: THREE.Vector3, direction: THREE.Vector3, scene: THREE.Scene) {
+    this.scene = scene;
+    
+    // 총알 메시 생성
+    const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0xffff00
+    });
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh.position.copy(startPosition);
+    
+    // 속도 설정 (매우 빠르게)
+    this.velocity = direction.normalize().multiplyScalar(200); // 200 units/second
+    
+    this.scene.add(this.mesh);
+    
+    // 궤적 생성
+    this.createTrail();
+  }
+
+  private createTrail() {
+    for (let i = 0; i < this.trailLength; i++) {
+      const trailGeometry = new THREE.SphereGeometry(0.02, 4, 4);
+      const opacity = (this.trailLength - i) / this.trailLength * 0.5;
+      const trailMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xffaa00,
+        transparent: true,
+        opacity: opacity
+      });
+      const trailMesh = new THREE.Mesh(trailGeometry, trailMaterial);
+      trailMesh.position.copy(this.mesh.position);
+      this.trail.push(trailMesh);
+      this.scene.add(trailMesh);
+    }
+  }
+
+  public update(deltaTime: number): boolean {
+    this.lifeTime += deltaTime;
+    
+    // 총알 이동
+    const movement = this.velocity.clone().multiplyScalar(deltaTime);
+    this.mesh.position.add(movement);
+    
+    // 궤적 업데이트
+    this.updateTrail();
+    
+    // 수명 체크
+    if (this.lifeTime >= this.maxLifeTime) {
+      return false; // 제거해야 함
+    }
+    
+    return true; // 계속 유지
+  }
+
+  private updateTrail() {
+    // 궤적 위치 업데이트 (뒤에서부터)
+    for (let i = this.trail.length - 1; i > 0; i--) {
+      this.trail[i].position.copy(this.trail[i - 1].position);
+    }
+    
+    // 첫 번째 궤적을 총알 위치로
+    if (this.trail.length > 0) {
+      this.trail[0].position.copy(this.mesh.position);
+    }
+  }
+
+  public dispose() {
+    // 총알 제거
+    this.scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    
+    // 궤적 제거
+    this.trail.forEach(trailMesh => {
+      this.scene.remove(trailMesh);
+      trailMesh.geometry.dispose();
+      (trailMesh.material as THREE.Material).dispose();
+    });
+    this.trail = [];
+  }
 }
 
 export class MultiplayerScene {
@@ -83,9 +176,16 @@ export class MultiplayerScene {
   private readonly shotCooldown = 500; // 0.5초 (1초에 2발)
   private readonly maxShotRange = 1000; // 최대 사격 거리
   
+  // 시각적 효과 관련 변수
+  private visualBullets: VisualBullet[] = [];
+  private muzzleFlash: THREE.Mesh | null = null;
+  
   // 체력 시스템
   private health = 100;
   private readonly maxHealth = 100;
+  
+  // 무기 시스템
+  private shotsFired = 0;
   
   // 로그 제어 변수
   private lastLogTime = 0; // 0.01 → 0.05로 늘림
@@ -107,6 +207,7 @@ export class MultiplayerScene {
     this.initEvents();
     this.initEnvironment();
     this.loadPlaneModel();
+    this.createCrosshair();
 
     // 초기 체력 UI 설정
     setTimeout(() => {
@@ -383,6 +484,7 @@ export class MultiplayerScene {
     
     // 마우스 클릭으로 사격
     document.addEventListener('click', (event) => {
+      console.log('🎯 Mouse clicked',event);
       if (this.isPointerLocked) {
         this.shoot();
       }
@@ -679,7 +781,11 @@ export class MultiplayerScene {
     
     this.raycaster.set(this.camera.position, direction);
     
-    // 다른 플레이어들을 대상으로 raycasting
+    // 시각적 효과 생성 (레이캐스팅과 독립적)
+    this.createMuzzleFlash();
+    this.createVisualBullet(this.camera.position.clone(), direction.clone());
+    
+    // 다른 플레이어들을 대상으로 raycasting (기존 로직 유지)
     const targets: THREE.Object3D[] = [];
     this.otherPlayers.forEach((player) => {
       targets.push(player);
@@ -688,6 +794,8 @@ export class MultiplayerScene {
     const intersects = this.raycaster.intersectObjects(targets, true);
     
     this.lastShotTime = now;
+    this.shotsFired++;
+    this.updateWeaponHUD();
     console.log(`🔫 Shooting from position: [${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}]`);
     
     if (intersects.length > 0) {
@@ -743,6 +851,65 @@ export class MultiplayerScene {
     }, 1000);
   }
 
+  // 총구 화염 효과
+  private createMuzzleFlash() {
+    if (!this.localPlane) return;
+    
+    // CSS 총구 화염 효과
+    this.createMuzzleFlashOverlay();
+    
+    // 기존 총구 화염 제거
+    if (this.muzzleFlash) {
+      this.scene.remove(this.muzzleFlash);
+      this.muzzleFlash.geometry.dispose();
+      (this.muzzleFlash.material as THREE.Material).dispose();
+    }
+    
+    // 새 총구 화염 생성 (3D 효과)
+    const geometry = new THREE.SphereGeometry(0.5, 8, 8);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    this.muzzleFlash = new THREE.Mesh(geometry, material);
+    
+    // 비행기 앞쪽에 위치
+    const muzzlePosition = new THREE.Vector3(0, 0, -2).applyQuaternion(this.localPlane.quaternion);
+    this.muzzleFlash.position.copy(this.localPlane.position).add(muzzlePosition);
+    
+    this.scene.add(this.muzzleFlash);
+    
+    // 100ms 후 제거
+    setTimeout(() => {
+      if (this.muzzleFlash) {
+        this.scene.remove(this.muzzleFlash);
+        this.muzzleFlash.geometry.dispose();
+        (this.muzzleFlash.material as THREE.Material).dispose();
+        this.muzzleFlash = null;
+      }
+    }, 100);
+  }
+
+  // CSS 총구 화염 오버레이
+  private createMuzzleFlashOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'muzzle-flash-overlay';
+    document.body.appendChild(overlay);
+    
+    // 애니메이션 종료 후 제거
+    overlay.addEventListener('animationend', () => {
+      document.body.removeChild(overlay);
+    });
+  }
+
+  // 시각적 총알 생성
+  private createVisualBullet(startPosition: THREE.Vector3, direction: THREE.Vector3) {
+    const bullet = new VisualBullet(startPosition, direction, this.scene);
+    this.visualBullets.push(bullet);
+  }
+
   private onResize = () => {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -760,6 +927,12 @@ export class MultiplayerScene {
 
     this.updatePhysics(deltaTime);
 
+    // 시각적 총알 업데이트
+    this.updateVisualBullets(deltaTime);
+
+    // 무기 상태 업데이트
+    this.updateWeaponHUD();
+
     // 카메라 추적
     const cameraOffset = new THREE.Vector3(0, 2, 8).applyQuaternion(this.localPlane.quaternion);
     const targetCameraPos = this.localPlane.position.clone().add(cameraOffset);
@@ -773,6 +946,38 @@ export class MultiplayerScene {
 
     this.renderer.render(this.scene, this.camera);
   };
+
+  // 시각적 총알 업데이트
+  private updateVisualBullets(deltaTime: number) {
+    for (let i = this.visualBullets.length - 1; i >= 0; i--) {
+      const bullet = this.visualBullets[i];
+      if (!bullet.update(deltaTime)) {
+        // 총알 수명 종료, 제거
+        bullet.dispose();
+        this.visualBullets.splice(i, 1);
+      }
+    }
+  }
+
+  // 조준점 생성
+  private createCrosshair() {
+    const crosshairElement = document.createElement('div');
+    crosshairElement.id = 'crosshair';
+    crosshairElement.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 1000;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    `;
+    document.body.appendChild(crosshairElement);
+  }
 
   // 체력 UI 업데이트
   private updateHealthUI() {
@@ -794,6 +999,29 @@ export class MultiplayerScene {
       }
     }
   }
+
+  // 무기 HUD 업데이트
+  private updateWeaponHUD() {
+    const weaponStatus = document.getElementById('weapon-status');
+    const shotsFiredElement = document.getElementById('shots-fired');
+    
+    if (weaponStatus) {
+      const now = performance.now();
+      const cooldownRemaining = this.shotCooldown - (now - this.lastShotTime);
+      
+      if (cooldownRemaining > 0) {
+        weaponStatus.textContent = `Reloading (${Math.ceil(cooldownRemaining / 100) / 10}s)`;
+        weaponStatus.style.color = '#FFC107';
+      } else {
+        weaponStatus.textContent = 'Ready';
+        weaponStatus.style.color = '#4CAF50';
+      }
+    }
+    
+    if (shotsFiredElement) {
+      shotsFiredElement.textContent = this.shotsFired.toString();
+    }
+  }
   
   // 피격 처리
   public takeDamage(damage: number) {
@@ -813,22 +1041,15 @@ export class MultiplayerScene {
   
   // 피격 시각적 효과
   private showDamageEffect() {
-    // 화면 가장자리 빨간색 효과
+    // 개선된 CSS 피격 효과
     const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100%';
-    overlay.style.height = '100%';
-    overlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.zIndex = '9999';
-    
+    overlay.className = 'damage-overlay';
     document.body.appendChild(overlay);
     
-    setTimeout(() => {
+    // 애니메이션 종료 후 제거
+    overlay.addEventListener('animationend', () => {
       document.body.removeChild(overlay);
-    }, 200);
+    });
   }
   
   // 로컬 플레이어 사망 처리
