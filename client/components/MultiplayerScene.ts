@@ -602,6 +602,7 @@ export class MultiplayerScene {
   }
 
   private removeRemotePlayer(id: string) {
+    console.log(`🎮 Removing remote player ${id}`);
     const mesh = this.otherPlayers.get(id);
     if (mesh) {
       this.scene.remove(mesh);
@@ -752,6 +753,8 @@ export class MultiplayerScene {
         this.lastLogTime = now;
       }
       
+      console.log(`🎮 Sending state to server - Player ID: ${this.socket.getSocketId()}`);
+
       // 서버로 상태 전송
       this.socket.sendState({
         position: this.localPlane.position.toArray(),
