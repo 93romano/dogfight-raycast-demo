@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { redisClient, pgPool } from '../config/database.js';
+import { pgPool } from '../config/database.js';
+// import { redisClient, pgPool } from '../config/database.js';
 
 class GameEventService {
   // 유저 생성 또는 가져오기
@@ -39,12 +40,13 @@ class GameEventService {
     );
   }
 
-  // 히트 이벤트 처리 및 Redis Stream에 저장
+  // 히트 이벤트 처리 및 Redis Stream에 저장 (주석처리)
   async processHitEvent(eventData) {
     const eventId = uuidv4();
     const { matchId, attackerId, victimId, damage, eventType } = eventData;
 
-    // Redis Stream에 이벤트 추가
+    // Redis Stream에 이벤트 추가 (주석처리)
+    /*
     await redisClient.xadd(
       'game_events',
       '*',
@@ -66,7 +68,9 @@ class GameEventService {
       damage,
       eventId
     }));
+    */
 
+    console.log(`🎯 Hit event processed: ${eventType} - ${attackerId} -> ${victimId} (${damage} damage)`);
     return eventId;
   }
 

@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import Redis from 'ioredis';
+// import Redis from 'ioredis';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,7 +13,8 @@ const pgPool = new Pool({
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
 });
 
-// Redis 설정
+// Redis 설정 (주석처리)
+/*
 const redisClient = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -25,6 +26,29 @@ const redisClient = new Redis({
 });
 
 // Redis Pub/Sub 클라이언트 (별도 연결)
+const redisPubSub = redisClient.duplicate();
+*/
+
+// Redis 클라이언트 모킹 (기능 비활성화)
+const redisClient = {
+  hmset: async () => {},
+  expire: async () => {},
+  hset: async () => {},
+  del: async () => {},
+  sadd: async () => {},
+  srem: async () => {},
+  publish: async () => {},
+  keys: async () => [],
+  hgetall: async () => ({}),
+  smembers: async () => [],
+  quit: async () => {},
+  duplicate: () => ({
+    subscribe: async () => {},
+    on: () => {},
+    quit: async () => {}
+  })
+};
+
 const redisPubSub = redisClient.duplicate();
 
 export {

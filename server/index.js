@@ -32,7 +32,8 @@ const gameState = {
 const INACTIVE_TIMEOUT = 120000; // 2분 (120초)
 const activeConnections = new Map(); // playerId -> { ws, lastActivity }
 
-// Redis 기반 연결 상태 관리 함수들
+// Redis 기반 연결 상태 관리 함수들 (주석처리)
+/*
 async function setPlayerConnectionState(playerId, userId, username, matchId, wsId) {
   try {
     const now = Date.now();
@@ -67,52 +68,30 @@ async function setPlayerConnectionState(playerId, userId, username, matchId, wsI
     console.error('Error setting Redis connection state:', error);
   }
 }
+*/
+
+// Redis 기능 비활성화된 버전
+async function setPlayerConnectionState(playerId, userId, username, matchId, wsId) {
+  console.log(`🔗 Player ${playerId} connected (Redis disabled)`);
+}
 
 async function updatePlayerActivity(playerId, userId) {
-  try {
-    const now = Date.now();
-    await Promise.all([
-      redisClient.hset(`user:${userId}:session`, 'lastActivity', now),
-      redisClient.expire(`user:${userId}:session`, 300),
-      redisClient.expire(`connection:${playerId}`, 120)
-    ]);
-  } catch (error) {
-    console.error('Error updating player activity:', error);
-  }
+  // Redis 기능 비활성화
+  // console.log(`📊 Activity updated for Player ${playerId}`);
 }
 
 async function clearPlayerConnectionState(playerId, userId, matchId) {
-  try {
-    await Promise.all([
-      redisClient.del(`connection:${playerId}`),
-      redisClient.hset(`user:${userId}:session`, 'status', 'disconnected'),
-      matchId ? redisClient.srem(`match:${matchId}:players`, playerId) : Promise.resolve(),
-      redisClient.del(`player:${playerId}:state`)
-    ]);
-    
-    console.log(`🧹 Redis connection state cleared for Player ${playerId}`);
-  } catch (error) {
-    console.error('Error clearing Redis connection state:', error);
-  }
+  // Redis 기능 비활성화
+  console.log(`🧹 Player ${playerId} disconnected (Redis disabled)`);
 }
 
 async function forceDisconnectPlayer(playerId, oldWsId, reason) {
-  try {
-    // Redis Pub/Sub로 강제 연결 해제 요청
-    await redisPubSub.publish('force_disconnect', JSON.stringify({
-      playerId,
-      oldWsId,
-      serverId: SERVER_ID,
-      reason
-    }));
-    
-    console.log(`📡 Published force disconnect for Player ${playerId}, wsId: ${oldWsId}`);
-  } catch (error) {
-    console.error('Error publishing force disconnect:', error);
-  }
+  // Redis 기능 비활성화
+  console.log(`📡 Force disconnect for Player ${playerId} (Redis disabled)`);
 }
 
-// Redis Pub/Sub 구독 설정
+// Redis Pub/Sub 구독 설정 (주석처리)
+/*
 const subscriber = redisClient.duplicate();
 subscriber.subscribe('force_disconnect');
 
@@ -138,8 +117,12 @@ subscriber.on('message', (channel, message) => {
 });
 
 console.log(`🔗 Redis Pub/Sub subscriber initialized for server: ${SERVER_ID}`);
+*/
 
-// 서버 시작 시 이전 세션 정리
+console.log(`🔗 Redis Pub/Sub disabled for server: ${SERVER_ID}`);
+
+// 서버 시작 시 이전 세션 정리 (주석처리)
+/*
 async function cleanupPreviousConnections() {
   try {
     console.log('🧹 Cleaning up previous connections...');
@@ -170,8 +153,14 @@ async function cleanupPreviousConnections() {
     console.error('Error cleaning up previous connections:', error);
   }
 }
+*/
 
-// Redis 상태 모니터링 (개발용)
+async function cleanupPreviousConnections() {
+  console.log('🧹 Redis cleanup disabled');
+}
+
+// Redis 상태 모니터링 (개발용) - 주석처리
+/*
 async function logRedisState() {
   try {
     const sessions = await redisClient.keys('user:*:session');
@@ -192,6 +181,11 @@ async function logRedisState() {
     console.error('Error logging Redis state:', error);
   }
 }
+*/
+
+async function logRedisState() {
+  console.log('📊 Redis monitoring disabled');
+}
 
 // 서버 시작 시 정리 수행
 await cleanupPreviousConnections();
@@ -201,7 +195,8 @@ if (process.env.NODE_ENV === 'development') {
   setInterval(logRedisState, 300000); // 5분마다
 }
 
-// 개발용 Redis 상태 조회 헬퍼 함수들
+// 개발용 Redis 상태 조회 헬퍼 함수들 (주석처리)
+/*
 global.debugRedis = {
   // 연결된 플레이어 목록 조회
   async getActivePlayers() {
@@ -295,6 +290,19 @@ if (process.env.NODE_ENV === 'development') {
   console.log('   - debugRedis.getPlayerState(playerId)');
   console.log('   - debugRedis.getMatchPlayers(matchId)');
   console.log('   - debugRedis.cleanupRedis()');
+}
+*/
+
+// Redis 디버그 기능 비활성화
+global.debugRedis = {
+  getActivePlayers: async () => console.log('Redis debug disabled'),
+  getPlayerState: async () => console.log('Redis debug disabled'),
+  getMatchPlayers: async () => console.log('Redis debug disabled'),
+  cleanupRedis: async () => console.log('Redis debug disabled')
+};
+
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔧 Development mode: Redis debug functions disabled');
 }
 
 // 비활성 사용자 체크 및 제거
@@ -630,7 +638,8 @@ async function handleMovementEvent(playerId, event, ws) {
     player.speed = event.speed;
   }
 
-  // Redis에 플레이어 상태 저장 (논블로킹)
+  // Redis에 플레이어 상태 저장 (논블로킹) - 주석처리
+  /*
   try {
     await redisClient.hmset(`player:${playerId}:state`, {
       position: JSON.stringify(player.position),
@@ -643,6 +652,7 @@ async function handleMovementEvent(playerId, event, ws) {
   } catch (error) {
     console.error('Error saving player state to Redis:', error);
   }
+  */
 
   // 다른 플레이어들에게 움직임 이벤트 브로드캐스트
   const movementMessage = JSON.stringify({
@@ -693,7 +703,8 @@ wss.on('connection', async (ws, req) => {
     
     console.log(`🎯 Username: ${username}, Assigned Player ID: ${playerId} (User ID: ${userId})`);
     
-    // Redis 기반 중복 연결 체크 및 강제 재연결 처리
+    // Redis 기반 중복 연결 체크 및 강제 재연결 처리 (주석처리)
+    /*
     try {
       const existingConnection = await redisClient.hgetall(`connection:${playerId}`);
       
@@ -721,6 +732,9 @@ wss.on('connection', async (ws, req) => {
       console.error('Error checking/cleaning existing connection:', error);
       // Redis 오류가 발생해도 연결은 계속 진행
     }
+    */
+    
+    console.log(`🔄 Player ${playerId} (${username}) connecting (Redis disabled)`);
     
     // 매치가 없으면 새 매치 시작
     if (!gameState.currentMatchId) {
@@ -751,8 +765,8 @@ wss.on('connection', async (ws, req) => {
   ws.username = username;
   ws.wsId = wsId;
   
-  // Redis에 연결 상태 저장
-  await setPlayerConnectionState(playerId, userId, username, gameState.currentMatchId, wsId);
+  // Redis에 연결 상태 저장 (주석처리)
+  // await setPlayerConnectionState(playerId, userId, username, gameState.currentMatchId, wsId);
   
   // 활성 연결 목록에 추가
   activeConnections.set(playerId, {
@@ -917,8 +931,8 @@ wss.on('connection', async (ws, req) => {
   ws.on('close', async () => {
     console.log(`👋 Player ${playerId} disconnected`);
     
-    // Redis 연결 상태 정리
-    await clearPlayerConnectionState(playerId, userId, gameState.currentMatchId);
+      // Redis 연결 상태 정리 (주석처리)
+  // await clearPlayerConnectionState(playerId, userId, gameState.currentMatchId);
     
     // 플레이어 제거
     players.delete(playerId);
@@ -966,9 +980,9 @@ process.on('SIGINT', async () => {
   
   // 연결 종료
   await pgPool.end();
-  await redisClient.quit();
-  await redisPubSub.quit();
-  await subscriber.quit();
+  // await redisClient.quit();
+  // await redisPubSub.quit();
+  // await subscriber.quit();
   
   console.log('✅ All connections closed');
   process.exit(0);
