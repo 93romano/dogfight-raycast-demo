@@ -61,7 +61,7 @@ export class MultiplayerScene {
     // 게임 초기화
     this.showPlayerIdInput();
     this.loadPlaneModel();
-    this.createCrosshair();
+    // this.createCrosshair();
 
     // 체력 UI 설정
     setTimeout(() => {
@@ -195,6 +195,9 @@ export class MultiplayerScene {
         
         try {
           await this.networkManager.connect(username);
+
+          // 인증 성공 후 조준점 생성
+          this.createCrosshair();
           
           return {
             success: true,
@@ -276,9 +279,6 @@ export class MultiplayerScene {
 
     // WeaponSystem 업데이트
     this.weaponSystem.update(deltaTime);
-
-    // Environment 업데이트 (구름 애니메이션 등)
-    this.environment.updateClouds(deltaTime);
 
     // 네트워크 상태 동기화
     const inputState = this.inputManager.getCurrentInputState();

@@ -197,6 +197,9 @@ export class PlayerIdInput {
       // Attempt authentication
       const result = await this.options.onAuthentication(username);
 
+      console.log('username', this);
+      console.log('result', result);
+
       if (result.success) {
         this.hide();
       } else {

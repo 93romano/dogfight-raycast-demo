@@ -25,13 +25,18 @@ export class NetworkManager {
     console.log('🔌 Connecting to server with username:', username);
     
     return new Promise((resolve, reject) => {
+      let isResolved = false;
+      
       this.socket = new SocketManager(
         this.handlers.onPlayerJoin,
         this.handlers.onPlayerUpdate,
         this.handlers.onPlayerLeave,
         (players) => {
           this.handlers.onAllPlayers(players);
-          resolve(); // 연결 성공
+          if (!isResolved) {
+            isResolved = true;
+            resolve(); // 연결 성공
+          }
         },
         this.handlers.onPlayerMovement,
         this.handlers.onPlayerHit,
@@ -43,8 +48,11 @@ export class NetworkManager {
         if (this.socket?.isConnected() && this.socket?.getPlayerId()) {
           console.log('🎯 Socket connected successfully with Player ID:', this.socket.getPlayerId());
           this.reconnectAttempts = 0; // 성공 시 재연결 시도 횟수 리셋
-          resolve();
-        } else {
+          if (!isResolved) {
+            isResolved = true;
+            resolve();
+          }
+        } else if (!isResolved) {
           setTimeout(checkConnection, 100);
         }
       };
@@ -58,12 +66,18 @@ export class NetworkManager {
         // 연결 타임아웃 설정
         setTimeout(() => {
           if (!this.socket?.isConnected() || !this.socket?.getPlayerId()) {
-            reject(new Error('서버 연결 시간이 초과되었습니다.'));
+            if (!isResolved) {
+              isResolved = true;
+              reject(new Error('서버 연결 시간이 초과되었습니다.'));
+            }
           }
         }, 10000); // 10초 타임아웃
         
       } catch (error) {
-        reject(error);
+        if (!isResolved) {
+          isResolved = true;
+          reject(error);
+        }
       }
     });
   }
@@ -99,6 +113,7 @@ export class NetworkManager {
 
   public sendMovementEvent(event: MovementEvent): void {
     if (this.socket && this.socket.isConnected()) {
+      console.log('sendMovementEvent', event);
       this.socket.sendMovementEvent(event);
     } else {
       console.warn('Cannot send movement event: not connected to server');

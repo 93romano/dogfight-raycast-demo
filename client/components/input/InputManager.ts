@@ -44,26 +44,26 @@ export class InputManager {
       this.isPointerLocked = document.pointerLockElement === canvas;
     });
 
-    document.addEventListener('mousemove', (event) => {
-      if (this.isPointerLocked) {
-        this.targetYaw -= event.movementX * this.mouseSensitivity;
-        this.targetPitch -= event.movementY * this.mouseSensitivity;
+    // document.addEventListener('mousemove', (event) => {
+    //   if (this.isPointerLocked) {
+    //     this.targetYaw -= event.movementX * this.mouseSensitivity;
+    //     this.targetPitch -= event.movementY * this.mouseSensitivity;
         
-        const pitchLimit = Math.PI / 2 - 0.01;
-        this.targetPitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.targetPitch));
-      }
-    });
+    //     const pitchLimit = Math.PI / 2 - 0.01;
+    //     this.targetPitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.targetPitch));
+    //   }
+    // });
   }
 
   private initEvents() {
     document.addEventListener('keydown', (e) => this.keys.add(e.code));
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
     
-    // 마우스 클릭으로 사격
-    document.addEventListener('click', (event) => {
-      if (this.isPointerLocked && this.onShootCallback) {
+    // 스페이스 키로 사격
+    document.addEventListener('keydown', (event) => {
+      if (this.isPointerLocked && this.onShootCallback && event.code === 'Space') {
         this.onShootCallback();
-      }
+      } 
     });
   }
 

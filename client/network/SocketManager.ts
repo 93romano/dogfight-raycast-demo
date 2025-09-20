@@ -246,6 +246,7 @@ export class SocketManager {
   }
 
   private processStateUpdate(buffer: Uint8Array) {
+    console.log('processStateUpdate', buffer);
     const HEADER_SIZE = 8;
     const PLAYER_STATE_SIZE = 46;
     let offset = HEADER_SIZE;
@@ -397,12 +398,15 @@ export class SocketManager {
       console.log('🔌 Sending movement event');
       this.lastLogTime = now;
     }
+    console.log('socket-manager-sendMovementEvent', event);
     
+    // Send only movement event - server handles state updates internally
     this.socket.send(JSON.stringify({ 
       type: 'movement', 
       event,
       playerId: this.playerId 
     }));
+
     this.lastSentMovement = { ...event };
   }
 
