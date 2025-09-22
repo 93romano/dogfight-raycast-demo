@@ -125,10 +125,10 @@ export class MultiplayerScene {
     });
 
     this.stateSync = new StateSync({
-      positionThreshold: 0.5,
-      rotationThreshold: 0.05,
-      updateInterval: 100,
-      movementEventInterval: 5000
+      positionThreshold: 0.1,
+      rotationThreshold: 0.01,
+      updateInterval: 16,  // 60Hz (16ms)
+      movementEventInterval: 100  // 100ms
     });
 
     this.stateSync.setStateChangeCallback((state) => {
@@ -451,6 +451,12 @@ export class MultiplayerScene {
       });
       
       mesh.scale.set(0.5, 0.5, 0.5); // 1,1,1
+
+      // 로컬 플레이어와 같은 회전 적용
+      if (mesh.children[0]) {
+        mesh.children[0].rotation.y = Math.PI;
+      }
+
       mesh.position.fromArray(state.position);
       mesh.quaternion.fromArray(state.rotation);
       
@@ -506,9 +512,9 @@ export class MultiplayerScene {
       const targetPosition = new THREE.Vector3().fromArray(state.position);
       const targetQuaternion = new THREE.Quaternion().fromArray(state.rotation);
       
-      // 더 부드러운 보간 (낮은 값 = 더 부드러움)
-      mesh.position.lerp(targetPosition, 0.1);
-      mesh.quaternion.slerp(targetQuaternion, 0.1);
+      // 더 빠른 보간으로 반응성 개선
+      mesh.position.lerp(targetPosition, 0.3);
+      mesh.quaternion.slerp(targetQuaternion, 0.3);
       
       // 디버그 로그 (선택사항)
       if (Math.random() < 0.01) { // 1% 확률로 로그 출력
@@ -536,9 +542,9 @@ export class MultiplayerScene {
       const targetPosition = new THREE.Vector3().fromArray(event.position);
       const targetQuaternion = new THREE.Quaternion().fromArray(event.rotation);
       
-      // 더 부드러운 보간으로 업데이트
-      mesh.position.lerp(targetPosition, 0.2);
-      mesh.quaternion.slerp(targetQuaternion, 0.2);
+      // 빠른 반응을 위한 보간
+      mesh.position.lerp(targetPosition, 0.4);
+      mesh.quaternion.slerp(targetQuaternion, 0.4);
       
       console.log(`🎮 Remote player ${id} movement:`, {
         input: event.input,

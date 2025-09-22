@@ -9,7 +9,7 @@
     "dev": "node --watch index.js",
     "worker": "node worker.js",
     "worker:dev": "node --watch worker.js",
-    "db:init": "psql -h ${POSTGRES_HOST} -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f schema.sql"
+    "db:init": "psql -h localhost -U kimdonghyuk -d dogfight_database -f schema.sql"
   },
   "keywords": ["websocket", "game", "multiplayer", "server"],
   "author": "",
