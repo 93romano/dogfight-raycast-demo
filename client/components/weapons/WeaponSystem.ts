@@ -5,6 +5,10 @@ export interface WeaponStatus {
   isReady: boolean;
   cooldownRemaining: number;
   shotsFired: number;
+  ammo: number;
+  maxAmmo: number;
+  isReloading: boolean;
+  reloadTimeRemaining: number;
 }
 
 export class WeaponSystem {
@@ -15,6 +19,18 @@ export class WeaponSystem {
   private visualBullets: VisualBullet[] = [];
   private muzzleFlash: THREE.Mesh | null = null;
   private shotsFired = 0;
+
+  // 탄약 시스템
+  private ammo = 30;
+  private readonly maxAmmo = 30;
+  private isReloading = false;
+  private reloadStartTime = 0;
+  private readonly reloadDuration = 3000; // 3초
+  
+  // 월드 스페이스 조준점(기본: 카메라 앞쪽 고정 거리)
+  private reticle: THREE.Mesh | null = null;
+  private readonly reticleBaseDistance = 20; // 카메라 앞 20유닛
+  private readonly reticleMaxDistance = 200; // 최대 200유닛까지 가시화
   
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -31,17 +47,33 @@ export class WeaponSystem {
     this.camera = camera;
     this.otherPlayers = otherPlayers;
     this.onHitCallback = onHitCallback;
+
+    // 조준점 생성 (월드 공간에 배치되는 작은 링)
+    this.createWorldReticle();
   }
 
   public shoot(localPlane?: THREE.Group): boolean {
+    console.log('shoot');
     const now = performance.now();
-    
+
+    // 재장전 중이면 발사 불가
+    if (this.isReloading) {
+      console.log('🚫 Cannot shoot: reloading in progress');
+      return false;
+    }
+
+    // 탄약 체크
+    if (this.ammo <= 0) {
+      console.log('🚫 Cannot shoot: no ammo remaining');
+      return false;
+    }
+
     // 연사 제한 체크 (1초에 2발)
     if (now - this.lastShotTime < this.shotCooldown) {
       console.log(`🚫 Shot cooldown: ${Math.round(this.shotCooldown - (now - this.lastShotTime))}ms remaining`);
       return false;
     }
-    
+
     if (!localPlane) {
       console.log('❌ Cannot shoot: localPlane not available');
       return false;
@@ -49,6 +81,9 @@ export class WeaponSystem {
     
     // 카메라 위치와 방향으로 raycasting
     const direction = new THREE.Vector3();
+    console.log('new THREE.Vector3()',new THREE.Vector3());
+    console.log('direction', direction);
+    console.log('this.camera', this.camera);
     this.camera.getWorldDirection(direction);
     
     this.raycaster.set(this.camera.position, direction);
@@ -67,7 +102,8 @@ export class WeaponSystem {
     
     this.lastShotTime = now;
     this.shotsFired++;
-    console.log(`🔫 Shooting from position: [${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}]`);
+    this.ammo--; // 탄약 소모
+    console.log(`🔫 Shooting from position: [${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}] - Ammo: ${this.ammo}/${this.maxAmmo}`);
     
     if (intersects.length > 0) {
       const target = intersects[0];
@@ -105,7 +141,34 @@ export class WeaponSystem {
     return true;
   }
 
+  public reload(): boolean {
+    if (this.isReloading) {
+      console.log('🚫 Already reloading');
+      return false;
+    }
+
+    if (this.ammo >= this.maxAmmo) {
+      console.log('🚫 Ammo is full');
+      return false;
+    }
+
+    this.isReloading = true;
+    this.reloadStartTime = performance.now();
+    console.log(`🔄 Reloading... (${this.reloadDuration / 1000}s)`);
+    return true;
+  }
+
   public update(deltaTime: number) {
+    // 재장전 상태 업데이트
+    if (this.isReloading) {
+      const now = performance.now();
+      if (now - this.reloadStartTime >= this.reloadDuration) {
+        this.ammo = this.maxAmmo;
+        this.isReloading = false;
+        console.log(`✅ Reload complete! Ammo: ${this.ammo}/${this.maxAmmo}`);
+      }
+    }
+
     // 시각적 총알 업데이트
     for (let i = this.visualBullets.length - 1; i >= 0; i--) {
       const bullet = this.visualBullets[i];
@@ -115,16 +178,25 @@ export class WeaponSystem {
         this.visualBullets.splice(i, 1);
       }
     }
+
+    // 월드 스페이스 조준점 위치 갱신
+    this.updateWorldReticle();
   }
 
   public getStatus(): WeaponStatus {
     const now = performance.now();
     const cooldownRemaining = Math.max(0, this.shotCooldown - (now - this.lastShotTime));
-    
+    const reloadTimeRemaining = this.isReloading ?
+      Math.max(0, this.reloadDuration - (now - this.reloadStartTime)) : 0;
+
     return {
-      isReady: cooldownRemaining === 0,
+      isReady: cooldownRemaining === 0 && this.ammo > 0 && !this.isReloading,
       cooldownRemaining,
-      shotsFired: this.shotsFired
+      shotsFired: this.shotsFired,
+      ammo: this.ammo,
+      maxAmmo: this.maxAmmo,
+      isReloading: this.isReloading,
+      reloadTimeRemaining
     };
   }
 
@@ -196,5 +268,57 @@ export class WeaponSystem {
       geometry.dispose();
       material.dispose();
     }, 1000);
+  }
+
+  // ===== 월드 스페이스 조준점 유틸 =====
+  private createWorldReticle() {
+    if (this.reticle) return;
+
+    // 얇은 링 형태의 조준점
+    const geometry = new THREE.RingGeometry(0.25, 0.35, 32);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthTest: true // 월드에 존재하되, 기본적으로 가려짐 허용
+    });
+
+    this.reticle = new THREE.Mesh(geometry, material);
+    this.reticle.renderOrder = 1; // 기본 렌더 순서 약간 앞쪽
+    this.scene.add(this.reticle);
+
+    // 초기 위치 설정
+    this.updateWorldReticle();
+  }
+
+  private updateWorldReticle() {
+    if (!this.reticle) return;
+
+    // 카메라 전방 방향 계산
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+
+    // 기본은 카메라 앞 고정 거리 배치
+    let distance = this.reticleBaseDistance;
+
+    // 가능하면 현재 조준 레이와의 교차 지점(타겟)까지 조절
+    // 다른 플레이어들만 대상으로 하되, 없으면 기본 거리 유지
+    const targets: THREE.Object3D[] = [];
+    this.otherPlayers.forEach((player) => targets.push(player));
+
+    // 레이 설정 및 교차 검사
+    this.raycaster.set(this.camera.position, dir);
+    const intersects = targets.length > 0 ? this.raycaster.intersectObjects(targets, true) : [];
+    if (intersects.length > 0) {
+      // 너무 멀면 제한, 너무 가까우면 기본 거리 유지
+      const d = intersects[0].distance;
+      distance = Math.min(this.reticleMaxDistance, Math.max(this.reticleBaseDistance, d - 0.1));
+    }
+
+    // 위치/방향 갱신: 카메라 쿼터니언을 복사하여 항상 정면 보정
+    const pos = new THREE.Vector3().copy(this.camera.position).add(dir.multiplyScalar(distance));
+    this.reticle.position.copy(pos);
+    this.reticle.quaternion.copy(this.camera.quaternion);
   }
 }

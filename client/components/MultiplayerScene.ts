@@ -77,6 +77,10 @@ export class MultiplayerScene {
     this.inputManager.setOnShootCallback(() => {
       this.weaponSystem.shoot(this.localPlane);
     });
+
+    this.inputManager.setOnReloadCallback(() => {
+      this.weaponSystem.reload();
+    });
     
     // FlightPhysics 초기화
     this.flightPhysics = new FlightPhysics();
@@ -196,9 +200,17 @@ export class MultiplayerScene {
         try {
           await this.networkManager.connect(username);
 
+          // 연결 성공 이벤트 발생
+          window.dispatchEvent(new CustomEvent('playerConnected', {
+            detail: {
+              playerId: this.networkManager.getPlayerId(),
+              username: username
+            }
+          }));
+
           // 인증 성공 후 조준점 생성
           this.createCrosshair();
-          
+
           return {
             success: true,
             username: username
@@ -341,21 +353,56 @@ export class MultiplayerScene {
   private updateWeaponHUD() {
     const weaponStatus = document.getElementById('weapon-status');
     const shotsFiredElement = document.getElementById('shots-fired');
-    
+    const ammoCount = document.getElementById('ammo-count');
+    const reloadStatus = document.getElementById('reload-status');
+    const reloadProgress = document.getElementById('reload-progress');
+    const reloadBar = document.getElementById('reload-bar');
+
+    const status = this.weaponSystem.getStatus();
+
+    // 무기 상태 업데이트
     if (weaponStatus) {
-      const status = this.weaponSystem.getStatus();
-      
-      if (!status.isReady) {
-        weaponStatus.textContent = `Reloading (${Math.ceil(status.cooldownRemaining / 100) / 10}s)`;
+      if (status.isReloading) {
+        weaponStatus.textContent = 'Reloading';
+        weaponStatus.style.color = '#FFC107';
+      } else if (status.ammo === 0) {
+        weaponStatus.textContent = 'Empty - Press R';
+        weaponStatus.style.color = '#F44336';
+      } else if (!status.isReady) {
+        weaponStatus.textContent = `Cooldown (${Math.ceil(status.cooldownRemaining / 100) / 10}s)`;
         weaponStatus.style.color = '#FFC107';
       } else {
         weaponStatus.textContent = 'Ready';
         weaponStatus.style.color = '#4CAF50';
       }
     }
-    
+
+    // 탄약 수 업데이트
+    if (ammoCount) {
+      ammoCount.textContent = `${status.ammo}/${status.maxAmmo}`;
+      if (status.ammo === 0) {
+        ammoCount.style.color = '#F44336';
+      } else if (status.ammo <= 10) {
+        ammoCount.style.color = '#FFC107';
+      } else {
+        ammoCount.style.color = '#4CAF50';
+      }
+    }
+
+    // 재장전 진행도 업데이트
+    if (status.isReloading && reloadStatus && reloadProgress && reloadBar) {
+      reloadStatus.style.display = 'block';
+      const reloadProgressPercent = ((3000 - status.reloadTimeRemaining) / 3000) * 100;
+      const remainingSeconds = (status.reloadTimeRemaining / 1000).toFixed(1);
+
+      reloadProgress.textContent = `${remainingSeconds}s`;
+      reloadBar.style.width = `${reloadProgressPercent}%`;
+    } else if (reloadStatus) {
+      reloadStatus.style.display = 'none';
+    }
+
     if (shotsFiredElement) {
-      shotsFiredElement.textContent = this.weaponSystem.getStatus().shotsFired.toString();
+      shotsFiredElement.textContent = status.shotsFired.toString();
     }
   }
   
@@ -426,7 +473,7 @@ export class MultiplayerScene {
     
     const loader = new GLTFLoader();
     try {
-      const gltf = await loader.loadAsync('assets/models/Jet.glb');
+      const gltf = await loader.loadAsync('/assets/models/Jet.glb');
       const mesh = gltf.scene.clone(); // clone으로 각 유저별 독립적인 모델 생성
       
       // 다른 유저는 다른 색상으로 구분

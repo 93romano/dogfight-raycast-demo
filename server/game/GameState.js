@@ -37,6 +37,12 @@ export class GameState {
       maxHealth: 100,
       lastShotTime: 0,
       shotCooldown: 500, // 0.5초
+      // 탄약 시스템
+      ammo: 30,
+      maxAmmo: 30,
+      isReloading: false,
+      reloadStartTime: 0,
+      reloadDuration: 3000, // 3초
       ...playerData
     });
   }

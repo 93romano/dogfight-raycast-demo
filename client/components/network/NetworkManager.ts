@@ -113,7 +113,7 @@ export class NetworkManager {
 
   public sendMovementEvent(event: MovementEvent): void {
     if (this.socket && this.socket.isConnected()) {
-      console.log('sendMovementEvent', event);
+      // console.log('sendMovementEvent', event);
       this.socket.sendMovementEvent(event);
     } else {
       console.warn('Cannot send movement event: not connected to server');

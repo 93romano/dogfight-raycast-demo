@@ -54,6 +54,10 @@ export class SocketManager {
   private readonly logInterval = 5000; // 5초마다만 로그 출력
   private binaryPacketCount = 0;
   private lastBinaryLogTime = 0;
+  
+  // 초기 스냅샷 처리 상태
+  private initialStateBuffered: Record<string, PlayerState> | null = null;
+  private initialStateProcessed = false;
 
   constructor(
     private onJoin: PlayerUpdateCallback,
@@ -131,7 +135,16 @@ export class SocketManager {
     this.socket.onclose = (event) => {
       console.log(`❌ Disconnected from server. Code: ${event.code}, Reason: ${event.reason}`);
       this.stopKeepAlive();
-      
+
+      // 연결 끊김 이벤트 발생
+      window.dispatchEvent(new CustomEvent('playerDisconnected', {
+        detail: {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        }
+      }));
+
       // 정상적인 종료가 아닌 경우 재연결 시도
       if (event.code !== 1000 && event.code !== 1001) {
         this.scheduleReconnect();
@@ -160,6 +173,8 @@ export class SocketManager {
           // 서버에서 할당받은 플레이어 ID 저장
           this.playerId = msg.playerId;
           console.log('🎯 Connected successfully with Player ID:', this.playerId, 'Username:', msg.username);
+          // welcome 수신 후, 버퍼링된 초기 스냅샷이 있으면 플러시
+          this.flushInitialSnapshot();
           break;
         case 'player-id-conflict':
         case 'error':
@@ -169,6 +184,7 @@ export class SocketManager {
           this.disconnect();
           break;
         case 'player-joined':
+          console.log('socket-manager-player-joined', msg);
           this.onJoin(msg.id, msg.state);
           break;
         case 'player-update':
@@ -250,9 +266,12 @@ export class SocketManager {
     const HEADER_SIZE = 8;
     const PLAYER_STATE_SIZE = 46;
     let offset = HEADER_SIZE;
-
+    
+    // 전체 스냅샷을 누적
+    const players: Record<string, PlayerState> = {};
+    const parsedIds: number[] = [];
     while (offset + PLAYER_STATE_SIZE <= buffer.length) {
-      const playerId = (buffer[offset] << 8) | buffer[offset + 1];
+      const parsedPlayerId = (buffer[offset] << 8) | buffer[offset + 1];
       offset += 2;
 
       // Position (3x float32)
@@ -278,18 +297,59 @@ export class SocketManager {
       // Input state (4 bytes) - 사용하지 않음
       offset += 4;
 
-      const state: PlayerState = { position, rotation };
-      
-      // 내 플레이어가 아닌 경우에만 업데이트
-      if (this.playerId !== playerId) {
-        this.onUpdate(playerId.toString(), state);
+      players[parsedPlayerId.toString()] = { position, rotation };
+      parsedIds.push(parsedPlayerId);
+    }
+
+    // welcome 전이면 버퍼링
+    if (!this.playerId && !this.initialStateProcessed) {
+      console.log('🧊 Buffered initial snapshot (pre-welcome). players', players);
+      this.initialStateBuffered = players;
+      console.log('🧊 Buffered initial snapshot (pre-welcome). ids=', parsedIds);
+      return;
+    }
+
+    // welcome 후 최초 1회면 all-players로 전달(자기 자신 제외)
+    if (!this.initialStateProcessed) {
+      const filtered: Record<string, PlayerState> = {};
+      const selfId = this.playerId?.toString();
+      for (const [id, state] of Object.entries(players)) {
+        if (id !== selfId) filtered[id] = state;
       }
+      console.log('📋 Initial snapshot -> onAllPlayers. self=', selfId, 'ids=', parsedIds);
+      this.onInitAll(filtered);
+      this.initialStateProcessed = true;
+      this.initialStateBuffered = null;
+      return;
+    }
+
+    // 이후에는 개별 업데이트로 처리(자기 자신 제외)
+    const selfId = this.playerId?.toString();
+    for (const [id, state] of Object.entries(players)) {
+      if (id !== selfId) this.onUpdate(id, state);
     }
   }
 
   private readFloatBE(buffer: Uint8Array, offset: number): number {
     const view = new DataView(buffer.buffer, buffer.byteOffset + offset, 4);
     return view.getFloat32(0, false); // big-endian
+  }
+
+  private flushInitialSnapshot() {
+    if (this.initialStateProcessed) return;
+    const buffered = this.initialStateBuffered || {};
+    const filtered: Record<string, PlayerState> = {};
+    const selfId = this.playerId?.toString();
+    console.log('🧊 Flushing buffered initial snapshot. buffered=', buffered);
+    
+    for (const [id, state] of Object.entries(buffered)) {
+      console.log('🧊 Flushing buffered initial snapshot. id=', id, 'state=', state);
+      if (id !== selfId) filtered[id] = state;
+    }
+    console.log('📋 Flushing buffered initial snapshot. self=', selfId, 'count=', Object.keys(filtered).length);
+    this.onInitAll(filtered);
+    this.initialStateProcessed = true;
+    this.initialStateBuffered = null;
   }
 
   private scheduleReconnect() {
@@ -398,7 +458,7 @@ export class SocketManager {
       console.log('🔌 Sending movement event');
       this.lastLogTime = now;
     }
-    console.log('socket-manager-sendMovementEvent', event);
+    // console.log('socket-manager-sendMovementEvent', event);
     
     // Send only movement event - server handles state updates internally
     this.socket.send(JSON.stringify({ 

@@ -91,7 +91,9 @@ wss.on('connection', async (ws, req) => {
   
   // 쿼리 파라미터에서 username만 추출
   const url = new URL(req.url, 'http://localhost');
+  console.log('url', url);
   const username = url.searchParams.get('username');
+  console.log('username', username);
   
   if (!username) {
     console.log('❌ Missing username in connection request');
@@ -168,7 +170,8 @@ wss.on('connection', async (ws, req) => {
   
   // 게임 상태에 플레이어 추가
   gameState.addPlayer(playerId);
-  
+  console.log('gameState', gameState);
+  console.log('gameState.getAllPlayers()', gameState.getAllPlayers());
   // Send initial state
   ws.send(BinaryProtocol.createStateUpdateBuffer(gameState.getAllPlayers()));
 

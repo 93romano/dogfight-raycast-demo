@@ -27,6 +27,7 @@ export class InputManager {
   
   // 이벤트 콜백
   private onShootCallback?: () => void;
+  private onReloadCallback?: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.initPointerLock(canvas);
@@ -58,17 +59,26 @@ export class InputManager {
   private initEvents() {
     document.addEventListener('keydown', (e) => this.keys.add(e.code));
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    
-    // 스페이스 키로 사격
+
+    // 스페이스 키로 사격, R키로 재장전
     document.addEventListener('keydown', (event) => {
-      if (this.isPointerLocked && this.onShootCallback && event.code === 'Space') {
-        this.onShootCallback();
-      } 
+      if (this.isPointerLocked) {
+        if (this.onShootCallback && event.code === 'Space') {
+          console.log('onShootCallback');
+          this.onShootCallback();
+        } else if (this.onReloadCallback && event.code === 'KeyR') {
+          this.onReloadCallback();
+        }
+      }
     });
   }
 
   public setOnShootCallback(callback: () => void) {
     this.onShootCallback = callback;
+  }
+
+  public setOnReloadCallback(callback: () => void) {
+    this.onReloadCallback = callback;
   }
 
   public getCurrentInputState(): InputState {

@@ -2,6 +2,7 @@ import { MultiplayerScene } from './components/MultiplayerScene';
 
 class Game {
   private multiplayerScene: MultiplayerScene;
+  private playerIdElement: HTMLElement;
   private speedElement: HTMLElement;
   private positionElement: HTMLElement;
   private eventsSentElement: HTMLElement;
@@ -13,6 +14,22 @@ class Game {
     const canvas = document.getElementById('webgl') as HTMLCanvasElement;
     if (!canvas) {
       throw new Error('Canvas element not found');
+    }
+
+    // playerConnected 이벤트 리스너 추가
+    window.addEventListener('playerConnected', (event: Event) => {
+      const customEvent = event as CustomEvent;
+      this.updatePlayerId(customEvent.detail?.playerId);
+    });
+
+    // playerDisconnected 이벤트 리스너 추가
+    window.addEventListener('playerDisconnected', () => {
+      this.updatePlayerId(undefined, true); // 연결 끊김 상태로 표시
+    });
+
+    this.playerIdElement = document.getElementById('player-id') as HTMLElement;
+    if (!this.playerIdElement) {
+      throw new Error('Player ID element not found');
     }
 
     this.speedElement = document.getElementById('speed') as HTMLElement;
@@ -54,7 +71,18 @@ class Game {
     this.updateHUD();
   };
 
+  private updatePlayerId = (playerId?: number, disconnected = false) => {
+    if (playerId !== undefined) {
+      this.playerIdElement.textContent = playerId.toString();
+    } else if (disconnected) {
+      this.playerIdElement.textContent = '연결 끊김';
+    } else {
+      this.playerIdElement.textContent = '...';
+    }
+  };
+
   private updateHUD = () => {
+    // console.log('this.multiplayerScene',this.multiplayerScene);
     this.speedElement.textContent = this.multiplayerScene.getSpeed().toFixed(1);
     const pos = this.multiplayerScene.getPosition();
     this.positionElement.textContent = `[${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}]`;

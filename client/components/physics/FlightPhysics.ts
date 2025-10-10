@@ -12,9 +12,12 @@ export class FlightPhysics {
 
   private speed = 0;
   private readonly minSpeed = 0;
-  private readonly maxSpeed = 700;
-  private readonly accel = 5;
-  private readonly decel = 3;
+  // private readonly maxSpeed = 700;
+  private readonly maxSpeed = 10;
+  // private readonly accel = 5;
+  private readonly accel = 1;
+  // private readonly decel = 3;
+  private readonly decel = 1;
 
   // 회전 값들
   private pitch = 0;

@@ -164,6 +164,7 @@
   </head>
   <body>
     <div id="hud">
+      <div>Player ID: <span id="player-id">0</span></div>
       <div>Speed: <span id="speed">0</span></div>
       <div>Position: <span id="position">[0.0, 0.0, 0.0]</span></div>
       <div class="health-container">
@@ -174,6 +175,13 @@
         </div>
       </div>
       <div>Weapon: <span id="weapon-status">Ready</span></div>
+      <div>Ammo: <span id="ammo-count">30/30</span></div>
+      <div id="reload-status" style="display: none;">
+        <div>Reloading: <span id="reload-progress">0.0s</span></div>
+        <div style="width: 150px; height: 8px; background: #333; border: 1px solid #fff; border-radius: 4px; margin-top: 5px;">
+          <div id="reload-bar" style="height: 100%; background: #4CAF50; width: 0%; transition: width 0.1s;"></div>
+        </div>
+      </div>
       <div>Shots Fired: <span id="shots-fired">0</span></div>
       <div>Click to start</div>
     </div>

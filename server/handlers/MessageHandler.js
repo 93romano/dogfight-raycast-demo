@@ -107,6 +107,10 @@ export class MessageHandler {
             await this.combatSystem.handlePlayerKill(playerId, data.victimId, data.damage);
           }
           break;
+
+        case 'reload':
+          this.combatSystem.handlePlayerReload(playerId);
+          break;
           
         case 'damage':
           if (data.victimId && data.victimId !== playerId) {
