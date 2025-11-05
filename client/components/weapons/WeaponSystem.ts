@@ -14,23 +14,20 @@ export interface WeaponStatus {
 export class WeaponSystem {
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   private lastShotTime = 0;
-  private readonly shotCooldown = 500; // 0.5초 (1초에 2발)
+  private readonly shotCooldown = 100; // 0.5초 (1초에 2발)
   private readonly maxShotRange = 1000; // 최대 사격 거리
   private visualBullets: VisualBullet[] = [];
   private muzzleFlash: THREE.Mesh | null = null;
   private shotsFired = 0;
 
   // 탄약 시스템
-  private ammo = 30;
-  private readonly maxAmmo = 30;
+  private ammo = 100;
+  private readonly maxAmmo = 100;
   private isReloading = false;
   private reloadStartTime = 0;
   private readonly reloadDuration = 3000; // 3초
   
-  // 월드 스페이스 조준점(기본: 카메라 앞쪽 고정 거리)
-  private reticle: THREE.Mesh | null = null;
-  private readonly reticleBaseDistance = 20; // 카메라 앞 20유닛
-  private readonly reticleMaxDistance = 200; // 최대 200유닛까지 가시화
+  // 월드 스페이스 조준점은 CSS 크로스헤어로 대체 (사용 안 함)
   
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -48,8 +45,19 @@ export class WeaponSystem {
     this.otherPlayers = otherPlayers;
     this.onHitCallback = onHitCallback;
 
-    // 조준점 생성 (월드 공간에 배치되는 작은 링)
-    this.createWorldReticle();
+    // 화면 중앙 CSS 크로스헤어만 사용. 월드 링 조준점은 생성하지 않음.
+  }
+
+  // ===== 내부 유틸: 타격 객체 → 플레이어 매핑 강화 =====
+  private getHitPlayerIdFromObject(object: THREE.Object3D): string | null {
+    for (const [playerId, playerRoot] of this.otherPlayers) {
+      let node: THREE.Object3D | null = object;
+      while (node) {
+        if (node === playerRoot) return playerId;
+        node = node.parent;
+      }
+    }
+    return null;
   }
 
   public shoot(localPlane?: THREE.Group): boolean {
@@ -79,23 +87,22 @@ export class WeaponSystem {
       return false;
     }
     
-    // 카메라 위치와 방향으로 raycasting
-    const direction = new THREE.Vector3();
-    console.log('new THREE.Vector3()',new THREE.Vector3());
-    console.log('direction', direction);
-    console.log('this.camera', this.camera);
-    this.camera.getWorldDirection(direction);
-    
-    this.raycaster.set(this.camera.position, direction);
+    // 화면 중앙(NDC: 0,0) 기준으로 레이캐스트 (일반 FPS 조준)
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    // Sprite 포함 오브젝트에 대한 레이캐스트를 위해 카메라 지정 (안전)
+    this.raycaster.camera = this.camera;
     
     // 시각적 효과 생성 (레이캐스팅과 독립적)
     this.createMuzzleFlash(localPlane);
-    this.createVisualBullet(this.camera.position.clone(), direction.clone());
+    // 총알 시각 효과도 레이 방향과 일치시키기
+    const startPos = this.camera.position.clone();
+    const dir = this.raycaster.ray.direction.clone();
+    this.createVisualBullet(startPos, dir);
     
     // 다른 플레이어들을 대상으로 raycasting
     const targets: THREE.Object3D[] = [];
     this.otherPlayers.forEach((player) => {
-      targets.push(player);
+      if (player) targets.push(player);
     });
     
     const intersects = this.raycaster.intersectObjects(targets, true);
@@ -106,29 +113,27 @@ export class WeaponSystem {
     console.log(`🔫 Shooting from position: [${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)}] - Ammo: ${this.ammo}/${this.maxAmmo}`);
     
     if (intersects.length > 0) {
-      const target = intersects[0];
-      const distance = target.distance;
+      // 이름표(Sprite) 등은 제외하고 실제 메시만 타격 대상으로 인정
+      const firstValidHit = intersects.find(i => !(i.object instanceof THREE.Sprite));
+      if (!firstValidHit) {
+        console.log('💨 Shot hit non-target (sprite/nameplate) only');
+        return true;
+      }
+      const distance = firstValidHit.distance;
       
       if (distance <= this.maxShotRange) {
-        // 타겟이 된 플레이어 찾기
-        let targetPlayerId: string | null = null;
-        for (const [playerId, playerMesh] of this.otherPlayers) {
-          if (target.object.parent === playerMesh || target.object === playerMesh) {
-            targetPlayerId = playerId;
-            break;
-          }
-        }
-        
+        // 타겟이 된 플레이어 찾기 (부모 체인으로 안전 판별)
+        const targetPlayerId = this.getHitPlayerIdFromObject(firstValidHit.object);
         if (targetPlayerId) {
           console.log(`🎯 Hit target! Player ID: ${targetPlayerId}, Distance: ${distance.toFixed(2)}m`);
           
           // 콜백을 통해 히트 이벤트 전달
           if (this.onHitCallback) {
-            this.onHitCallback(targetPlayerId, 10, target.point, distance);
+            this.onHitCallback(targetPlayerId, 10, firstValidHit.point, distance);
           }
           
           // 시각적 피드백 (히트 마커)
-          this.showHitMarker(target.point);
+          this.showHitMarker(firstValidHit.point);
           return true;
         }
       } else {
@@ -179,8 +184,7 @@ export class WeaponSystem {
       }
     }
 
-    // 월드 스페이스 조준점 위치 갱신
-    this.updateWorldReticle();
+    // 월드 링 조준점은 사용하지 않음
   }
 
   public getStatus(): WeaponStatus {
@@ -270,55 +274,5 @@ export class WeaponSystem {
     }, 1000);
   }
 
-  // ===== 월드 스페이스 조준점 유틸 =====
-  private createWorldReticle() {
-    if (this.reticle) return;
-
-    // 얇은 링 형태의 조준점
-    const geometry = new THREE.RingGeometry(0.25, 0.35, 32);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.9,
-      side: THREE.DoubleSide,
-      depthTest: true // 월드에 존재하되, 기본적으로 가려짐 허용
-    });
-
-    this.reticle = new THREE.Mesh(geometry, material);
-    this.reticle.renderOrder = 1; // 기본 렌더 순서 약간 앞쪽
-    this.scene.add(this.reticle);
-
-    // 초기 위치 설정
-    this.updateWorldReticle();
-  }
-
-  private updateWorldReticle() {
-    if (!this.reticle) return;
-
-    // 카메라 전방 방향 계산
-    const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
-
-    // 기본은 카메라 앞 고정 거리 배치
-    let distance = this.reticleBaseDistance;
-
-    // 가능하면 현재 조준 레이와의 교차 지점(타겟)까지 조절
-    // 다른 플레이어들만 대상으로 하되, 없으면 기본 거리 유지
-    const targets: THREE.Object3D[] = [];
-    this.otherPlayers.forEach((player) => targets.push(player));
-
-    // 레이 설정 및 교차 검사
-    this.raycaster.set(this.camera.position, dir);
-    const intersects = targets.length > 0 ? this.raycaster.intersectObjects(targets, true) : [];
-    if (intersects.length > 0) {
-      // 너무 멀면 제한, 너무 가까우면 기본 거리 유지
-      const d = intersects[0].distance;
-      distance = Math.min(this.reticleMaxDistance, Math.max(this.reticleBaseDistance, d - 0.1));
-    }
-
-    // 위치/방향 갱신: 카메라 쿼터니언을 복사하여 항상 정면 보정
-    const pos = new THREE.Vector3().copy(this.camera.position).add(dir.multiplyScalar(distance));
-    this.reticle.position.copy(pos);
-    this.reticle.quaternion.copy(this.camera.quaternion);
-  }
+  // (삭제됨) 월드 스페이스 조준점 유틸은 더 이상 사용하지 않습니다.
 }

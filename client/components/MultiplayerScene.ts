@@ -42,6 +42,20 @@ export class MultiplayerScene {
   // 카메라 추적
   private readonly lerpFactor = 0.5;
 
+  // 사격 시 1인칭(콕핏) 카메라
+  private firstPersonUntil: number = 0;
+  private firstPersonStart: number = 0;
+  private readonly fpDurationMs: number = 3000;        // 유지 시간 3초
+  private readonly fpTransitionMs: number = 250;       // 전환 시간 0.25초
+  private readonly defaultFov: number = 75;            // 기존 FOV
+  private readonly firstPersonFov: number = 65;        // 조준 시 FOV
+  // private readonly cockpitOffset = new THREE.Vector3(0, 0.25, -2.8);
+  private readonly cockpitOffset = new THREE.Vector3(0, 0.25, -1.2);
+  // 경량 카메라 흔들림 (옵션)
+  private shootShakeEnd: number = 0;
+  private readonly shootShakeDuration: number = 200;   // 0.2초
+  private readonly shakeAmplitude: number = 0.02;      // 위치 흔들림 크기(유닛)
+
   constructor(canvas: HTMLCanvasElement) {
     // Core THREE.js 초기화
     this.scene = new THREE.Scene();
@@ -75,6 +89,12 @@ export class MultiplayerScene {
     // InputManager 초기화
     this.inputManager = new InputManager(canvas);
     this.inputManager.setOnShootCallback(() => {
+      // 1인칭 카메라 활성화(3초 유지)
+      const now = performance.now();
+      this.firstPersonStart = now;
+      this.firstPersonUntil = now + this.fpDurationMs;
+      this.shootShakeEnd = now + this.shootShakeDuration;
+      // 실제 사격
       this.weaponSystem.shoot(this.localPlane);
     });
 
@@ -286,6 +306,8 @@ export class MultiplayerScene {
     const now = performance.now();
     const deltaTime = (now - this.lastStateUpdate) / 1000;
     this.lastStateUpdate = now;
+    const deltaMs = deltaTime * 1000;
+    const perfHeavy = deltaMs > 50; // 프레임 시간이 50ms(≈20FPS) 이상이면 즉시 전환/흔들림 비활성화
 
     this.updatePhysics(deltaTime);
 
@@ -299,11 +321,88 @@ export class MultiplayerScene {
     // 무기 상태 업데이트
     this.updateWeaponHUD();
 
-    // 카메라 추적
+    // 카메라: 사격 시 1인칭(콕핏) 3초 유지, 전환 0.25s (부하 시 즉시 전환)
+    const inFirstPerson = now < this.firstPersonUntil;
+    // 1인칭 동안 로컬 기체는 렌더에서 숨김 처리, 끝나면 자동 복원
+    if (this.localPlane) {
+      const shouldBeVisible = !inFirstPerson;
+      if (this.localPlane.visible !== shouldBeVisible) {
+        this.localPlane.visible = shouldBeVisible;
+      }
+    }
+    if (inFirstPerson) {
+      const t = Math.min(1, (now - this.firstPersonStart) / this.fpTransitionMs);
+      // 목표 위치: 기체 로컬 -Z(앞), Y(위) 기준 오프셋 적용
+      const fpOffsetWorld = this.cockpitOffset.clone().applyQuaternion(this.localPlane.quaternion);
+      const fpTargetPos = this.localPlane.position.clone().add(fpOffsetWorld);
+
+      if (perfHeavy) {
+        // 성능 저하 시 즉시 전환
+        this.camera.position.copy(fpTargetPos);
+      } else {
+        // 부드러운 위치 전환
+        if (t < 1) {
+          this.camera.position.lerp(fpTargetPos, t);
+        } else {
+          // 유지 구간은 소폭 lerp로 안정화
+          this.camera.position.lerp(fpTargetPos, 0.4);
+        }
+      }
+
+      // 카메라가 바라볼 지점(기체 전방)
+      const forward = new THREE.Vector3(0, 0, -10).applyQuaternion(this.localPlane.quaternion);
+      const lookTarget = this.localPlane.position.clone().add(forward);
+
+      // 간단한 경량 흔들림 (옵션): 사격 직후 0.2초만 미세 오프셋
+      if (!perfHeavy && now < this.shootShakeEnd) {
+        const s = (now / 33.3) % (Math.PI * 2); // ~30Hz 근처
+        const jitter = new THREE.Vector3(
+          Math.sin(s * 1.7),
+          Math.sin(s * 2.3 + 1.0),
+          Math.sin(s * 1.9 + 2.0)
+        ).multiplyScalar(this.shakeAmplitude);
+        this.camera.position.add(jitter);
+      }
+
+      // 가속 시(전진/상승 입력) 미세 흔들림 - 성능 저하 시 비활성화
+      if (!perfHeavy && (inputState.forward || inputState.up)) {
+        const s2 = (now / 40) % (Math.PI * 2);
+        const accelJitter = new THREE.Vector3(
+          Math.sin(s2 * 1.3) * 0.5,
+          Math.sin(s2 * 2.1 + 0.8),
+          0
+        ).multiplyScalar(this.shakeAmplitude * 0.6);
+        this.camera.position.add(accelJitter);
+      }
+
+      this.camera.lookAt(lookTarget);
+
+      // FOV 전환 (부하 시 즉시 적용)
+      const targetFov = this.firstPersonFov;
+      if (perfHeavy) {
+        this.camera.fov = targetFov;
+      } else {
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 0.3);
+      }
+      this.camera.updateProjectionMatrix();
+    } else {
+      // 기존 3인칭 추적 카메라
       const cameraOffset = new THREE.Vector3(0, 2, 8).applyQuaternion(this.localPlane.quaternion);
       const targetCameraPos = this.localPlane.position.clone().add(cameraOffset);
-      this.camera.position.lerp(targetCameraPos, this.lerpFactor);
+      if (perfHeavy) {
+        this.camera.position.copy(targetCameraPos);
+      } else {
+        this.camera.position.lerp(targetCameraPos, this.lerpFactor);
+      }
       this.camera.lookAt(this.localPlane.position);
+      // FOV 복귀 부드럽게
+      if (perfHeavy) {
+        this.camera.fov = this.defaultFov;
+      } else {
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.defaultFov, 0.2);
+      }
+      this.camera.updateProjectionMatrix();
+    }
 
     this.renderer.render(this.scene, this.camera);
   };
@@ -408,6 +507,7 @@ export class MultiplayerScene {
   
   // 피격 처리
   public takeDamage(damage: number) {
+    console.log('takeDamage', damage);
     this.health = Math.max(0, this.health - damage);
     this.updateHealthUI();
     
@@ -605,9 +705,15 @@ export class MultiplayerScene {
   private handlePlayerHit(attackerId: string, victimId: string, damage: number, victimHealth: number) {
     console.log(`🎯 Player ${attackerId} hit Player ${victimId} for ${damage} damage! Victim health: ${victimHealth}`);
     
-    // 내가 피격당한 경우
+    // 내가 피격당한 경우 (서버 권한 상태와 동기화)
     if (this.networkManager && victimId === this.networkManager.getPlayerId()?.toString()) {
-      this.takeDamage(damage);
+      // 서버가 보낸 체력으로 동기화하여 오차 최소화
+      this.health = Math.max(0, Math.min(this.maxHealth, victimHealth));
+      this.updateHealthUI();
+      this.showDamageEffect();
+      if (this.health <= 0) {
+        this.handleLocalPlayerDeath();
+      }
     }
     
     // 다른 플레이어의 피격 표시 (선택사항)

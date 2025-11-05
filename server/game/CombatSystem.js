@@ -11,7 +11,7 @@ export class CombatSystem {
   async handlePlayerHit(attackerId, victimId, damage, position, distance) {
     const matchId = this.gameState.getCurrentMatch();
     console.log('matchId', matchId);
-    if (!matchId) return;
+    // 매치가 없더라도 기본 전투 로직은 진행 (개발/로컬 환경 호환)
 
     try {
       const attacker = this.gameState.getPlayer(attackerId);
