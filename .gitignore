@@ -11,3 +11,12 @@ node_modules/
 
 test-nodes
 raycast-demo
+
+# OS / local junk
+.DS_Store
+
+# Redis dump (runtime data)
+dump.rdb
+
+# Client build output
+client/dist/
