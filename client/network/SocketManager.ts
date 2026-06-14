@@ -26,6 +26,7 @@ export type PlayerLeaveCallback = (id: string) => void;
 export type PlayerMovementCallback = (id: string, event: MovementEvent) => void;
 export type PlayerHitCallback = (attackerId: string, victimId: string, damage: number, victimHealth: number) => void;
 export type PlayerDeathCallback = (victimId: string, attackerId: string, respawnPosition: number[]) => void;
+export type DisconnectCallback = (info: { code: number; reason: string; wasClean: boolean }) => void;
 
 export class SocketManager {
   private socket: WebSocket | null = null;
@@ -66,7 +67,8 @@ export class SocketManager {
     private onInitAll: (players: Record<string, PlayerState>) => void,
     private onMovement: PlayerMovementCallback,
     private onHit?: PlayerHitCallback,
-    private onDeath?: PlayerDeathCallback
+    private onDeath?: PlayerDeathCallback,
+    private onDisconnect?: DisconnectCallback
   ) {
     // 생성자에서는 연결하지 않음
   }
@@ -136,14 +138,11 @@ export class SocketManager {
       console.log(`❌ Disconnected from server. Code: ${event.code}, Reason: ${event.reason}`);
       this.stopKeepAlive();
 
-      // 연결 끊김 이벤트 발생
-      window.dispatchEvent(new CustomEvent('playerDisconnected', {
-        detail: {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        }
-      }));
+      this.onDisconnect?.({
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      });
 
       // 정상적인 종료가 아닌 경우 재연결 시도
       if (event.code !== 1000 && event.code !== 1001) {

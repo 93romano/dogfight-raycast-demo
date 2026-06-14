@@ -1,8 +1,9 @@
 // server/index.js
 
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import { pgPool, redisClient, redisPubSub } from './config/database.js';
+import WebSocket, { WebSocketServer } from 'ws';
+import { Buffer } from 'buffer';
+import { pgPool, redisClient } from './config/database.js';
 import GameEventService from './services/GameEventService.js';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';

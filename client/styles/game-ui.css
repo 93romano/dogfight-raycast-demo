@@ -1,0 +1,184 @@
+/*
+ * Shared "Modern Military HUD" UI styles (design tokens, HUD modules, FX overlays,
+ * and menu/game-over flourishes). Single source of truth referenced by both
+ * index.html (production) and preview.html (dev-only screen preview).
+ */
+:root {
+  --bg-base: #070b12;
+  --bg-panel: #0c1320;
+  --bg-raised: #111a2b;
+  --primary: #3399ff;
+  --primary-bright: #66ccff;
+  --ok: #4caf50;
+  --caution: #ffc107;
+  --danger: #f44336;
+  --text: #e6f1ff;
+  --text-2: #8fa9c8;
+  --text-muted: #5a7290;
+  --font-head: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+  --font-mono: 'Space Mono', 'Noto Sans KR', monospace;
+  --glow: 0 0 12px rgba(51, 153, 255, 0.45);
+  --glow-strong: 0 0 20px rgba(102, 204, 255, 0.6);
+}
+
+* { box-sizing: border-box; }
+body, html {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-base);
+  color: var(--text);
+  font-family: var(--font-head);
+}
+canvas { display: block; }
+
+/* ---------- shared HUD building blocks ---------- */
+.hud-panel {
+  position: relative;
+  background: rgba(12, 19, 32, 0.6);
+  border: 1px solid rgba(51, 153, 255, 0.2);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 14px 16px;
+  box-shadow: 0 0 12px rgba(51, 153, 255, 0.12);
+}
+.hud-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  opacity: 0.7;
+}
+.bracket { position: absolute; width: 12px; height: 12px; border-color: rgba(51, 153, 255, 0.85); pointer-events: none; }
+.bracket.tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.bracket.tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.bracket.bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.bracket.br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.mono { font-family: var(--font-mono); }
+.glow-text { text-shadow: 0 0 8px rgba(51, 153, 255, 0.6); }
+.micro-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* ---------- full-screen FX overlays ---------- */
+#fx-vignette {
+  position: fixed; inset: 0; z-index: 4; pointer-events: none;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0) 45%, rgba(7, 11, 18, 0.85) 100%);
+}
+#fx-scanlines {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0.35;
+  background: linear-gradient(rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-size: 100% 4px;
+}
+
+/* ---------- HUD root (revealed in-game) ---------- */
+#hud-root { position: fixed; inset: 0; z-index: 10; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; }
+body.state-playing #hud-root { opacity: 1; }
+
+/* top bar */
+#hud-topbar {
+  position: fixed; top: 0; left: 0; width: 100%;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 22px; z-index: 12;
+  border-bottom: 1px solid rgba(51, 153, 255, 0.3);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 0 15px rgba(51, 153, 255, 0.12);
+}
+.brand { font-weight: 900; font-size: 22px; letter-spacing: -0.02em; color: var(--primary); text-shadow: 0 0 8px rgba(51, 153, 255, 0.6); }
+.topnav { display: flex; gap: 26px; }
+.topnav span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--text-2); text-transform: uppercase; }
+.topnav span.active { color: var(--primary-bright); border-bottom: 2px solid var(--primary-bright); padding-bottom: 3px; }
+.topright { display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--text-2); letter-spacing: 0.08em; }
+.topright .callsign { color: var(--text); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); display: inline-block; }
+
+/* combat score (top-center) */
+#hud-score {
+  position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 12;
+  display: flex; align-items: center; gap: 20px; padding: 8px 22px;
+  background: rgba(12, 19, 32, 0.5); border: 1px solid rgba(51, 153, 255, 0.2);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 0 12px rgba(51, 153, 255, 0.12);
+}
+.score-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.score-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.2em; color: var(--text-muted); }
+.score-num { font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--text); line-height: 1; }
+.score-num.accent { color: var(--primary-bright); text-shadow: 0 0 8px rgba(51, 153, 255, 0.55); }
+.score-sep { width: 1px; height: 24px; background: rgba(51, 153, 255, 0.25); }
+
+/* vitals (bottom-left) */
+#hud-vitals { position: fixed; left: 24px; bottom: 30px; width: 260px; z-index: 12; }
+.module-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+.module-title { font-weight: 700; font-size: 13px; letter-spacing: 0.18em; color: var(--primary); }
+#health-pct { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--ok); }
+.health-track { position: relative; height: 8px; background: rgba(51, 153, 255, 0.12); overflow: hidden; }
+#health-fill { height: 100%; width: 100%; background: var(--ok); box-shadow: 0 0 6px rgba(76, 175, 80, 0.6); transition: width 0.25s ease, background 0.25s; }
+#health-text { position: absolute; right: 4px; top: -16px; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+.telemetry { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+.telemetry .val { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--primary-bright); line-height: 1.1; }
+.pos-line { margin-top: 14px; }
+#position { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+
+/* weapon (bottom-right) */
+#hud-weapon { position: fixed; right: 24px; bottom: 30px; width: 260px; text-align: right; z-index: 12; }
+#hud-weapon .module-head { flex-direction: row-reverse; }
+#weapon-status { padding: 2px 8px; border: 1px solid rgba(76, 175, 80, 0.4); background: rgba(76, 175, 80, 0.15); color: var(--ok); font-size: 10px; letter-spacing: 0.18em; font-weight: 700; font-family: var(--font-head); white-space: nowrap; }
+#ammo-count { font-family: var(--font-mono); font-size: 34px; font-weight: 700; color: var(--primary-bright); text-shadow: 0 0 8px rgba(51, 153, 255, 0.6); }
+#reload-status { margin-top: 10px; }
+#reload-status .reload-track { height: 6px; background: rgba(51, 153, 255, 0.15); border: 1px solid rgba(51, 153, 255, 0.3); margin-top: 4px; }
+#reload-bar { height: 100%; background: var(--caution); width: 0%; box-shadow: 0 0 6px rgba(255, 193, 7, 0.6); transition: width 0.1s linear; }
+.weapon-foot { margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+#shots-fired { color: var(--text-2); }
+
+/* diagnostics (top-right, compact) */
+#debug { position: fixed; top: 64px; right: 24px; width: 210px; z-index: 12; }
+#debug .diag-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0; }
+.input-status { display: flex; align-items: center; justify-content: center; height: 24px; border-radius: 2px; font-family: var(--font-mono); font-size: 11px; color: var(--text); border: 1px solid rgba(51, 153, 255, 0.2); transition: all 0.12s; }
+.input-active { background-color: var(--primary); border-color: var(--primary-bright); color: #02101f; box-shadow: 0 0 8px rgba(51, 153, 255, 0.6); }
+.input-inactive { background-color: rgba(17, 26, 43, 0.6); }
+#debug .diag-line { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 2px; }
+#debug .diag-line span:last-child { color: var(--text-2); }
+
+/* center reticle */
+#crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 11; pointer-events: none; display: none; width: 180px; height: 180px; }
+#crosshair .ret-ring { position: absolute; inset: 0; border: 2px solid rgba(51, 153, 255, 0.4); border-radius: 50%; animation: retPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+#crosshair .ret-line { position: absolute; background: rgba(51, 153, 255, 0.85); left: 50%; top: 50%; }
+#crosshair .ret-line.t { width: 2px; height: 16px; transform: translate(-50%, -90px); }
+#crosshair .ret-line.b { width: 2px; height: 16px; transform: translate(-50%, 74px); }
+#crosshair .ret-line.l { height: 2px; width: 16px; transform: translate(-90px, -50%); }
+#crosshair .ret-line.r { height: 2px; width: 16px; transform: translate(74px, -50%); }
+#crosshair .ret-dot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: var(--primary-bright); box-shadow: 0 0 8px var(--primary); transform: translate(-50%, -50%); }
+@keyframes retPulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}
+
+/* damage + muzzle flash overlays (driven by GameHud / WeaponSystem) */
+.damage-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 600;
+  background: radial-gradient(circle at center, transparent 50%, rgba(244, 67, 54, 0.45) 100%);
+  animation: damageFlash 0.35s ease-out;
+}
+@keyframes damageFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.muzzle-flash-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 500;
+  background: radial-gradient(circle at center, rgba(102, 204, 255, 0.25) 0%, transparent 18%);
+  animation: muzzleFlash 0.1s ease-out;
+}
+@keyframes muzzleFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* menu / game-over flourishes */
+@keyframes hudFlicker {
+  0% { opacity: 0.85; } 5% { opacity: 0.95; } 10% { opacity: 0.85; }
+  15% { opacity: 1; } 20% { opacity: 0.92; } 100% { opacity: 1; }
+}
+@keyframes scanMove { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }

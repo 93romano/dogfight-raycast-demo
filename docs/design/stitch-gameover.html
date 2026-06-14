@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DOGFIGHT // MISSION_FAILED</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;family=Public+Sans:wght@300;400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: "#070B12",
+                            panel: "#0C1320",
+                            raised: "#111A2B",
+                            primary: "#3399FF",
+                            bright: "#66CCFF",
+                            ok: "#4CAF50",
+                            caution: "#FFC107",
+                            danger: "#F44336",
+                            text: "#E6F1FF",
+                            secondary: "#8FA9C8",
+                            muted: "#5A7290"
+                        }
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    fontFamily: {
+                        headline: ["Space Grotesk", "sans-serif"],
+                        display: ["Space Grotesk", "sans-serif"],
+                        body: ["Space Grotesk", "sans-serif"],
+                        label: ["Public Sans", "sans-serif"],
+                        mono: ["Space Mono", "monospace"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline-effect {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent, rgba(51, 153, 255, 0.05) 50%, transparent);
+            animation: scanline 8s linear infinite;
+            pointer-events: none;
+        }
+        .hud-vignette {
+            background: radial-gradient(circle, transparent 20%, rgba(7, 11, 18, 0.9) 100%);
+        }
+        .glitch-text {
+            text-shadow: 0 0 20px rgba(244, 67, 54, 0.8);
+        }
+        .corner-bracket {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(51, 153, 255, 0.3);
+        }
+        .bracket-tl { top: 40px; left: 40px; border-right: none; border-bottom: none; }
+        .bracket-tr { top: 40px; right: 40px; border-left: none; border-bottom: none; }
+        .bracket-bl { bottom: 40px; left: 40px; border-right: none; border-top: none; }
+        .bracket-br { bottom: 40px; right: 40px; border-left: none; border-top: none; }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-brand-bg text-brand-text font-body overflow-hidden h-screen w-screen flex flex-col items-center justify-center">
+<!-- HUD BACKGROUND LAYER -->
+<div class="fixed inset-0 z-0">
+<div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1544077960-604201fe74bc?auto=format&amp;fit=crop&amp;q=80&amp;w=2000')] bg-cover bg-center mix-blend-overlay opacity-20" data-alt="A cinematic third-person view of a burning fighter jet cockpit falling through a dark stormy sky at night. Traces of smoke and sparks fill the air. The lighting is dominated by deep navy tones and flickering red emergency lights, creating a high-stakes military flight combat atmosphere. The overall mood is catastrophic and somber, following a high-speed dogfight engagement."></div>
+<div class="absolute inset-0 hud-vignette"></div>
+<div class="scanline-effect"></div>
+<!-- Tactical Grid Overlay -->
+<div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(rgba(51, 153, 255, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(51, 153, 255, 0.2) 1px, transparent 1px); background-size: 50px 50px;"></div>
+</div>
+<!-- Top Navigation Anchor (Shared Component Mapping) -->
+<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 h-16 bg-[#070B12]/80 backdrop-blur-md border-b border-[#3399FF]/30 shadow-[0_0_15px_rgba(51,153,255,0.1)]">
+<div class="font-headline font-black italic tracking-tighter text-[#3399FF] drop-shadow-[0_0_12px_rgba(51,153,255,0.45)]">DOGFIGHT</div>
+<div class="flex items-center gap-6">
+<div class="font-headline uppercase tracking-widest text-sm text-[#3399FF]">SERVER ONLINE // 24MS</div>
+<div class="flex items-center gap-4 text-[#8FA9C8]">
+<span class="material-symbols-outlined cursor-pointer hover:text-[#66CCFF] transition-colors">settings</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-[#66CCFF] transition-colors">signal_cellular_alt</span>
+</div>
+</div>
+</header>
+<!-- Corner Brackets -->
+<div class="corner-bracket bracket-tl"></div>
+<div class="corner-bracket bracket-tr"></div>
+<div class="corner-bracket bracket-bl"></div>
+<div class="corner-bracket bracket-br"></div>
+<!-- MAIN GAME OVER CONTENT -->
+<main class="relative z-10 flex flex-col items-center text-center max-w-4xl px-6">
+<!-- Status Indicator -->
+<div class="mb-4 flex items-center gap-2 text-brand-danger font-mono text-xs tracking-[0.2em]">
+<span class="animate-pulse">●</span> SYSTEM_OFFLINE // CONNECTIVITY_LOST
+        </div>
+<!-- Main Title -->
+<h1 class="text-7xl md:text-9xl font-headline font-black uppercase tracking-tighter text-brand-danger glitch-text mb-2">
+            격추됨
+        </h1>
+<!-- Kill Credit -->
+<div class="flex items-center gap-3 mb-12">
+<span class="text-brand-secondary font-mono tracking-widest text-sm uppercase">Killed By</span>
+<span class="text-brand-primary font-mono font-bold text-xl tracking-tight bg-brand-primary/10 px-3 py-1 border border-brand-primary/20">RAPTOR_01</span>
+</div>
+<!-- Horizontal Stats Line -->
+<div class="w-full h-px bg-gradient-to-r from-transparent via-brand-primary/30 to-transparent mb-6"></div>
+<div class="flex flex-wrap justify-center gap-x-12 gap-y-4 font-mono text-lg text-brand-text mb-6">
+<div class="flex items-center gap-3">
+<span class="text-brand-muted text-xs uppercase tracking-widest">Kills</span>
+<span class="text-2xl font-bold">07</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-brand-muted text-xs uppercase tracking-widest">Deaths</span>
+<span class="text-2xl font-bold">03</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-brand-muted text-xs uppercase tracking-widest">Score</span>
+<span class="text-2xl font-bold text-brand-primary">1240</span>
+</div>
+</div>
+<div class="w-full h-px bg-gradient-to-r from-transparent via-brand-primary/30 to-transparent mb-16"></div>
+<!-- Action Buttons -->
+<div class="flex flex-col sm:flex-row gap-6 w-full max-w-md">
+<button class="group relative flex-1 px-8 py-4 bg-brand-primary text-brand-bg font-headline font-bold uppercase tracking-widest transition-all duration-200 hover:bg-brand-bright active:scale-95 shadow-[0_0_12px_rgba(51,153,255,0.45)]">
+<span class="relative z-10">재시작</span>
+<div class="absolute inset-0 border-2 border-white/20 scale-105 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<button class="flex-1 px-8 py-4 border border-brand-primary/50 text-brand-primary font-headline font-bold uppercase tracking-widest transition-all duration-200 hover:bg-brand-primary/10 hover:border-brand-primary active:scale-95">
+                메인 메뉴
+            </button>
+</div>
+</main>
+<!-- Side Data Panels (HUD Flavour) -->
+<aside class="hidden lg:flex fixed left-10 top-1/2 -translate-y-1/2 flex-col gap-8 pointer-events-none">
+<div class="p-4 border-l-2 border-brand-primary/40 bg-brand-panel/30 backdrop-blur-sm">
+<div class="text-[10px] text-brand-muted uppercase font-mono mb-1">Telemetry</div>
+<div class="text-sm font-mono text-brand-secondary">ALT: 0.00 M</div>
+<div class="text-sm font-mono text-brand-secondary">SPD: 0.00 KM/H</div>
+</div>
+<div class="p-4 border-l-2 border-brand-danger/40 bg-brand-panel/30 backdrop-blur-sm">
+<div class="text-[10px] text-brand-danger uppercase font-mono mb-1">Hull Integrity</div>
+<div class="w-24 h-1 bg-brand-danger/20">
+<div class="w-0 h-full bg-brand-danger"></div>
+</div>
+<div class="text-sm font-mono text-brand-danger mt-1">CRITICAL FAILURE</div>
+</div>
+</aside>
+<aside class="hidden lg:flex fixed right-10 top-1/2 -translate-y-1/2 flex-col items-end gap-8 pointer-events-none">
+<div class="text-right p-4 border-r-2 border-brand-primary/40 bg-brand-panel/30 backdrop-blur-sm">
+<div class="text-[10px] text-brand-muted uppercase font-mono mb-1">Squadron Status</div>
+<div class="text-xs font-mono text-brand-secondary">PHANTOM_9: IN FLIGHT</div>
+<div class="text-xs font-mono text-brand-secondary">ACE_KING: RTB</div>
+</div>
+<div class="text-right p-4 border-r-2 border-brand-primary/40 bg-brand-panel/30 backdrop-blur-sm">
+<div class="text-[10px] text-brand-muted uppercase font-mono mb-1">Active Sector</div>
+<div class="text-sm font-mono text-brand-primary">SECTOR_7G</div>
+</div>
+</aside>
+<!-- Footer Navigation Anchor (Shared Component Mapping) -->
+<footer class="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-10 py-4 pointer-events-none [&amp;&gt;*]:pointer-events-auto">
+<div class="font-label font-mono text-[10px] uppercase tracking-widest text-[#5A7290]">
+            BUILD_V0.9_ALPHA // SECTOR_7G
+        </div>
+<div class="flex gap-6">
+<a class="font-label font-mono text-[10px] uppercase tracking-widest text-[#5A7290] hover:text-[#3399FF] transition-colors" href="#">LICENSING</a>
+<a class="font-label font-mono text-[10px] uppercase tracking-widest text-[#5A7290] hover:text-[#3399FF] transition-colors" href="#">SUPPORT</a>
+<a class="font-label font-mono text-[10px] uppercase tracking-widest text-[#5A7290] hover:text-[#3399FF] transition-colors" href="#">TERMS_OF_ENGAGEMENT</a>
+</div>
+</footer>
+<!-- Interactive script for some HUD life -->
+<script>
+        document.addEventListener('mousemove', (e) => {
+            const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
+            const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
+            document.querySelector('main').style.transform = `translate(${moveX}px, ${moveY}px)`;
+        });
+
+        // Simulating flickering HUD text
+        setInterval(() => {
+            const glitchText = document.querySelector('.glitch-text');
+            if (Math.random() > 0.95) {
+                glitchText.style.opacity = '0.5';
+                setTimeout(() => {
+                    glitchText.style.opacity = '1';
+                }, 50);
+            }
+        }, 100);
+    </script>
+</body></html>

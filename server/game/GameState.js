@@ -60,6 +60,20 @@ export class GameState {
     return this.players;
   }
 
+  getPlayerCount() {
+    return this.players.size;
+  }
+
+  getDebugInfo() {
+    return {
+      playerCount: this.players.size,
+      players: Array.from(this.players.keys()),
+      currentMatchId: this.currentMatchId,
+      tickRate: this.tickRate,
+      lastUpdate: this.lastUpdate
+    };
+  }
+
   updatePlayerState(playerId, state) {
     const player = this.players.get(playerId);
     if (player) {

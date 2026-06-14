@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DOGFIGHT HUD</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700;900&amp;family=Space+Mono:wght@400;700&amp;family=Public+Sans:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3399FF",
+                        "primary-bright": "#66CCFF",
+                        bg: "#070B12",
+                        panel: "#0C1320",
+                        raised: "#111A2B",
+                        success: "#4CAF50",
+                        warning: "#FFC107",
+                        danger: "#F44336",
+                        "text-primary": "#E6F1FF",
+                        "text-secondary": "#8FA9C8",
+                        "text-muted": "#5A7290",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    fontFamily: {
+                        headline: ["Space Grotesk"],
+                        display: ["Space Grotesk"],
+                        body: ["Space Grotesk"],
+                        label: ["Public Sans"],
+                        mono: ["Space Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #070B12;
+            overflow: hidden;
+            margin: 0;
+            cursor: crosshair;
+        }
+
+        .hud-scanline {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+        }
+
+        .corner-bracket {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-color: rgba(51, 153, 255, 0.8);
+        }
+        .bracket-tl { top: 0; left: 0; border-top: 2px solid; border-left: 2px solid; }
+        .bracket-tr { top: 0; right: 0; border-top: 2px solid; border-right: 2px solid; }
+        .bracket-bl { bottom: 0; left: 0; border-bottom: 2px solid; border-left: 2px solid; }
+        .bracket-br { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; }
+
+        .glowing-text {
+            text-shadow: 0 0 8px rgba(51, 153, 255, 0.6);
+        }
+
+        .glowing-border {
+            box-shadow: 0 0 12px rgba(51, 153, 255, 0.2);
+        }
+
+        .vignette {
+            background: radial-gradient(circle, rgba(0,0,0,0) 40%, rgba(7, 11, 18, 0.9) 100%);
+            pointer-events: none;
+        }
+
+        .crosshair-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.4; transform: translate(-50%, -50%) scale(1.05); }
+        }
+
+        .status-bar-segment {
+            background: rgba(51, 153, 255, 0.1);
+            height: 4px;
+            flex-grow: 1;
+        }
+    </style>
+</head>
+<body class="font-body text-text-primary h-screen w-screen relative select-none">
+<!-- WORLD BACKDROP -->
+<div class="absolute inset-0 z-0 overflow-hidden">
+<div class="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 opacity-60" style="background-image: url('https://lh3.googleusercontent.com/aida/AP1WRLtDJvbmzC32Sp6X-7OC9i3xFaWnbi5AKnrsXq75eA7wMYljNO39KXA6RVm84bUEEqEk8QXOmSdhjCdZNNsWgA47gN5JAXTHwgknzMcveXAw7SlvY1tDRaPv_8WKiZKbD6mv4GvaQdahpe9WpVyO26MqhGVLnuFqC90Bl9H9qm6Wfh9a3lOd-g5vIjHYOvwF6xf70ea83R_Xykooi3mfnvLvGiFNwMbJCd5gvRoKYgA3KqBdT6SmcikhBR_v'); filter: blur(4px) brightness(0.7);"></div>
+<div class="vignette absolute inset-0 z-10"></div>
+<div class="hud-scanline absolute inset-0 z-20 opacity-30"></div>
+</div>
+<!-- TOP NAVIGATION BAR -->
+<header class="flex justify-between items-center w-full px-6 py-4 fixed top-0 left-0 z-50 border-b border-[#3399FF]/30 backdrop-blur-sm shadow-[0_0_15px_rgba(51,153,255,0.15)]">
+<div class="font-display font-black text-2xl tracking-tighter text-[#3399FF] drop-shadow-[0_0_8px_rgba(51,153,255,0.6)]">DOGFIGHT</div>
+<nav class="hidden md:flex gap-8 items-center">
+<a class="font-label font-bold uppercase text-[10px] tracking-widest text-[#66CCFF] border-b-2 border-[#66CCFF] pb-1 shadow-[0_4px_10px_-2px_rgba(102,204,255,0.5)] transition-all" href="#">STATUS</a>
+<a class="font-label font-bold uppercase text-[10px] tracking-widest text-[#8FA9C8] hover:text-[#66CCFF] hover:bg-[#3399FF]/10 transition-all" href="#">COMBAT</a>
+<a class="font-label font-bold uppercase text-[10px] tracking-widest text-[#8FA9C8] hover:text-[#66CCFF] hover:bg-[#3399FF]/10 transition-all" href="#">SENSORS</a>
+</nav>
+<div class="flex items-center gap-6 text-[#3399FF]">
+<span class="material-symbols-outlined cursor-pointer hover:scale-110 transition-transform" data-icon="radar">radar</span>
+<span class="material-symbols-outlined cursor-pointer hover:scale-110 transition-transform" data-icon="settings">settings</span>
+<span class="material-symbols-outlined cursor-pointer hover:scale-110 transition-transform" data-icon="person">person</span>
+</div>
+</header>
+<!-- MISSION TIMER (TOP CENTER) -->
+<div class="fixed top-24 left-1/2 -translate-x-1/2 z-40">
+<div class="relative px-6 py-2 bg-panel/40 border border-primary/20 backdrop-blur-md min-w-[140px] text-center">
+<div class="bracket-tl corner-bracket"></div>
+<div class="bracket-tr corner-bracket"></div>
+<div class="bracket-bl corner-bracket"></div>
+<div class="bracket-br corner-bracket"></div>
+<div class="text-xs text-text-muted font-mono tracking-widest mb-1">MISSION TIME</div>
+<div class="text-3xl font-mono font-bold text-primary-bright tracking-wider glowing-text" id="timer">04:32</div>
+</div>
+</div>
+<!-- RETICLE (CENTER) -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+<div class="relative w-48 h-48 flex items-center justify-center">
+<!-- Outter Ring -->
+<div class="absolute inset-0 border-2 border-primary/40 rounded-full crosshair-pulse"></div>
+<!-- Crosshair Lines -->
+<div class="absolute w-[2px] h-4 bg-primary/80 top-0"></div>
+<div class="absolute w-[2px] h-4 bg-primary/80 bottom-0"></div>
+<div class="absolute h-[2px] w-4 bg-primary/80 left-0"></div>
+<div class="absolute h-[2px] w-4 bg-primary/80 right-0"></div>
+<!-- Center Dot -->
+<div class="w-1.5 h-1.5 bg-primary-bright rounded-full shadow-[0_0_8px_#3399FF]"></div>
+<!-- Dynamic Ticks -->
+<div class="absolute -right-12 top-1/2 -translate-y-1/2 flex flex-col gap-1 items-end opacity-60">
+<div class="w-6 h-[1px] bg-primary"></div>
+<div class="w-4 h-[1px] bg-primary/50"></div>
+<div class="w-6 h-[1px] bg-primary"></div>
+<div class="w-4 h-[1px] bg-primary/50"></div>
+<div class="w-6 h-[1px] bg-primary"></div>
+</div>
+</div>
+</div>
+<!-- VITALS MODULE (BOTTOM LEFT) -->
+<div class="fixed bottom-28 left-8 z-40 w-64">
+<div class="relative p-4 bg-panel/60 border border-primary/20 backdrop-blur-md">
+<div class="bracket-tl corner-bracket"></div>
+<div class="bracket-tr corner-bracket"></div>
+<div class="bracket-bl corner-bracket"></div>
+<div class="bracket-br corner-bracket"></div>
+<div class="flex justify-between items-end mb-3">
+<span class="font-headline font-bold text-sm tracking-widest text-primary">VITALS</span>
+<span class="font-mono text-success text-xl font-bold">78%</span>
+</div>
+<!-- Segmented Health Bar -->
+<div class="flex gap-1 mb-4">
+<div class="h-2 bg-success flex-1 shadow-[0_0_6px_rgba(76,175,80,0.5)]"></div>
+<div class="h-2 bg-success flex-1 shadow-[0_0_6px_rgba(76,175,80,0.5)]"></div>
+<div class="h-2 bg-success flex-1 shadow-[0_0_6px_rgba(76,175,80,0.5)]"></div>
+<div class="h-2 bg-success/20 flex-1"></div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-6">
+<div>
+<div class="text-[10px] text-text-muted font-mono mb-0.5">SPD (KTS)</div>
+<div class="text-2xl font-mono font-bold text-primary-bright">420</div>
+</div>
+<div>
+<div class="text-[10px] text-text-muted font-mono mb-0.5">ALT (FT)</div>
+<div class="text-2xl font-mono font-bold text-primary-bright">1240</div>
+</div>
+</div>
+</div>
+</div>
+<!-- WEAPON MODULE (BOTTOM RIGHT) -->
+<div class="fixed bottom-28 right-8 z-40 w-64 text-right">
+<div class="relative p-4 bg-panel/60 border border-primary/20 backdrop-blur-md">
+<div class="bracket-tl corner-bracket"></div>
+<div class="bracket-tr corner-bracket"></div>
+<div class="bracket-bl corner-bracket"></div>
+<div class="bracket-br corner-bracket"></div>
+<div class="flex justify-between items-end mb-3">
+<span class="px-2 py-0.5 bg-success/20 border border-success/40 text-success font-headline font-bold text-[10px] tracking-widest">READY</span>
+<span class="font-headline font-bold text-sm tracking-widest text-primary">WEAPON</span>
+</div>
+<div class="mb-4">
+<div class="text-[10px] text-text-muted font-mono mb-0.5">AMMUNITION</div>
+<div class="text-4xl font-mono font-bold text-primary-bright glowing-text">24<span class="text-lg text-primary/40">/30</span></div>
+</div>
+<div class="flex gap-0.5 justify-end mt-2 h-4">
+<div class="w-1 bg-primary-bright"></div>
+<div class="w-1 bg-primary-bright"></div>
+<div class="w-1 bg-primary-bright"></div>
+<div class="w-1 bg-primary-bright"></div>
+<div class="w-1 bg-primary-bright/20"></div>
+<div class="w-1 bg-primary-bright/20"></div>
+</div>
+</div>
+</div>
+<!-- BOTTOM NAV (MOBILE ALTERNATIVE / FOOTER SHELL) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-end px-4 pb-4 h-24 border-t border-[#3399FF]/20 bg-[#070B12]/40 backdrop-blur-md">
+<button class="flex flex-col items-center justify-center text-[#5A7290] p-2 hover:text-[#3399FF] hover:bg-[#3399FF]/5 transition-colors group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform" data-icon="speed">speed</span>
+<span class="font-label font-bold uppercase text-[10px] tracking-widest">VITALS</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#66CCFF] bg-[#3399FF]/20 rounded-lg p-2 border border-[#3399FF]/50 shadow-[0_0_10px_rgba(51,153,255,0.4)] group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform" data-icon="navigation">navigation</span>
+<span class="font-label font-bold uppercase text-[10px] tracking-widest">TACTICAL</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5A7290] p-2 hover:text-[#3399FF] hover:bg-[#3399FF]/5 transition-colors group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform" data-icon="target">target</span>
+<span class="font-label font-bold uppercase text-[10px] tracking-widest">WEAPONS</span>
+</button>
+</nav>
+<!-- ATMOSPHERIC PARTICLES -->
+<div class="absolute inset-0 z-10 pointer-events-none" id="particles"></div>
+<script>
+        // Simple Particle Effect for Cockpit Dust/Specks
+        const particleContainer = document.getElementById('particles');
+        const count = 30;
+        
+        for (let i = 0; i < count; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'absolute bg-white/10 rounded-full';
+            const size = Math.random() * 3 + 1;
+            dot.style.width = `${size}px`;
+            dot.style.height = `${size}px`;
+            dot.style.left = `${Math.random() * 100}%`;
+            dot.style.top = `${Math.random() * 100}%`;
+            
+            const duration = Math.random() * 10 + 10;
+            const delay = Math.random() * 5;
+            dot.style.animation = `floatParticle ${duration}s linear ${delay}s infinite`;
+            
+            particleContainer.appendChild(dot);
+        }
+
+        // Timer countdown logic simulation
+        let timeInSeconds = 272; // 04:32
+        const timerElement = document.getElementById('timer');
+
+        setInterval(() => {
+            if (timeInSeconds > 0) {
+                timeInSeconds--;
+                const mins = Math.floor(timeInSeconds / 60).toString().padStart(2, '0');
+                const secs = (timeInSeconds % 60).toString().padStart(2, '0');
+                timerElement.innerText = `${mins}:${secs}`;
+            }
+        }, 1000);
+
+        // Interaction for HUD look around feel
+        document.addEventListener('mousemove', (e) => {
+            const xAxis = (window.innerWidth / 2 - e.pageX) / 100;
+            const yAxis = (window.innerHeight / 2 - e.pageY) / 100;
+            const bg = document.querySelector('.absolute.inset-0.bg-cover');
+            bg.style.transform = `scale(1.1) translate(${xAxis}px, ${yAxis}px)`;
+        });
+    </script>
+<style>
+        @keyframes floatParticle {
+            0% { transform: translateY(0) translateX(0); opacity: 0; }
+            10% { opacity: 0.4; }
+            90% { opacity: 0.4; }
+            100% { transform: translateY(-100px) translateX(20px); opacity: 0; }
+        }
+    </style>
+</body></html>

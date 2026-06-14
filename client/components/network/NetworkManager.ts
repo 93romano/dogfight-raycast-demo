@@ -1,4 +1,4 @@
-import { SocketManager, PlayerState, MovementEvent } from '../../network/SocketManager';
+import { SocketManager, PlayerState, MovementEvent, DisconnectCallback } from '../../network/SocketManager';
 
 export interface NetworkEventHandlers {
   onPlayerJoin: (id: string, state: PlayerState) => void;
@@ -8,6 +8,7 @@ export interface NetworkEventHandlers {
   onPlayerMovement: (id: string, event: MovementEvent) => void;
   onPlayerHit: (attackerId: string, victimId: string, damage: number, victimHealth: number) => void;
   onPlayerDeath: (victimId: string, attackerId: string, respawnPosition: number[]) => void;
+  onDisconnected?: DisconnectCallback;
 }
 
 export class NetworkManager {
@@ -40,7 +41,8 @@ export class NetworkManager {
         },
         this.handlers.onPlayerMovement,
         this.handlers.onPlayerHit,
-        this.handlers.onPlayerDeath
+        this.handlers.onPlayerDeath,
+        this.handlers.onDisconnected
       );
 
       // 연결 성공 감지
@@ -140,5 +142,4 @@ export class NetworkManager {
     return this.socket?.getSocketId() ?? null;
   }
 }
-
 

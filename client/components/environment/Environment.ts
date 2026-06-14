@@ -14,14 +14,17 @@ export class Environment {
   }
 
   public async initialize(): Promise<void> {
-    await this.background.initialize(); 
+    await this.background.initialize();
 
-    // 조명 설정
+    // 조명 설정 (Lighting의 cool/moody 기본값 사용)
     this.lighting.initialize({
-      sunPosition: new THREE.Vector3(5, 10, 7),
+      sunPosition: new THREE.Vector3(8, 14, 6),
       enableShadows: true
     });
+  }
 
+  public dispose(): void {
+    this.background.dispose();
   }
 
 

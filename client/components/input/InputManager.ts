@@ -13,7 +13,7 @@ export interface InputState {
 export class InputManager {
   private keys: Set<string> = new Set();
   private isPointerLocked = false;
-  private mouseSensitivity = 0.002;
+  private readonly abortController = new AbortController();
   
   // 회전 값들
   private targetPitch = 0;
@@ -39,11 +39,11 @@ export class InputManager {
       if (!this.isPointerLocked) {
         canvas.requestPointerLock();
       }
-    });
+    }, { signal: this.abortController.signal });
 
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === canvas;
-    });
+    }, { signal: this.abortController.signal });
 
     // document.addEventListener('mousemove', (event) => {
     //   if (this.isPointerLocked) {
@@ -57,8 +57,12 @@ export class InputManager {
   }
 
   private initEvents() {
-    document.addEventListener('keydown', (e) => this.keys.add(e.code));
-    document.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    document.addEventListener('keydown', (e) => this.keys.add(e.code), {
+      signal: this.abortController.signal
+    });
+    document.addEventListener('keyup', (e) => this.keys.delete(e.code), {
+      signal: this.abortController.signal
+    });
 
     // 스페이스 키로 사격, R키로 재장전
     document.addEventListener('keydown', (event) => {
@@ -70,7 +74,7 @@ export class InputManager {
           this.onReloadCallback();
         }
       }
-    });
+    }, { signal: this.abortController.signal });
   }
 
   public setOnShootCallback(callback: () => void) {
@@ -130,5 +134,10 @@ export class InputManager {
 
   public getActiveKeys(): Set<string> {
     return new Set(this.keys);
+  }
+
+  public dispose(): void {
+    this.abortController.abort();
+    this.keys.clear();
   }
 }

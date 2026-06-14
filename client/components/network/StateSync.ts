@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PlayerState, MovementEvent } from '../../network/SocketManager';
+import { InputState } from '../input/InputManager';
 
 export interface SyncConfig {
   positionThreshold: number;
@@ -46,7 +47,7 @@ export class StateSync {
 
   public update(
     localPlane: THREE.Group,
-    inputState: any,
+    inputState: InputState,
     speed: number
   ): void {
     const now = performance.now();
@@ -80,7 +81,7 @@ export class StateSync {
 
   private checkInputChange(
     localPlane: THREE.Group, 
-    inputState: any, 
+    inputState: InputState, 
     speed: number, 
     now: number
   ): void {
@@ -95,28 +96,29 @@ export class StateSync {
 
     const timePassed = now - this.lastMovementTime > this.config.movementEventInterval;
 
-    if (timePassed) {
+    if (!inputChanged && !timePassed) {
+      return;
+    }
+
+    if (this.onMovementEvent) {
       // 움직임 이벤트 전송
       this.lastInputState = { ...inputState };
       this.lastMovementTime = now;
-
-      if (this.onMovementEvent) {
-        this.onMovementEvent({
-          type: 'movement',
-          input: {
-            forward: inputState.forward,
-            backward: inputState.backward,
-            left: inputState.left,
-            right: inputState.right,
-            up: inputState.up,
-            down: inputState.down,
-            roll: 0 // InputManager에서 처리됨
-          },
-          position: localPlane.position.toArray(),
-          rotation: localPlane.quaternion.toArray(),
-          speed: speed
-        });
-      }
+      this.onMovementEvent({
+        type: 'movement',
+        input: {
+          forward: inputState.forward,
+          backward: inputState.backward,
+          left: inputState.left,
+          right: inputState.right,
+          up: inputState.up,
+          down: inputState.down,
+          roll: 0
+        },
+        position: localPlane.position.toArray(),
+        rotation: localPlane.quaternion.toArray(),
+        speed: speed
+      });
     }
   }
 
@@ -126,5 +128,10 @@ export class StateSync {
 
   public updateConfig(newConfig: Partial<SyncConfig>): void {
     this.config = { ...this.config, ...newConfig };
+  }
+
+  public dispose(): void {
+    this.onStateChange = undefined;
+    this.onMovementEvent = undefined;
   }
 }

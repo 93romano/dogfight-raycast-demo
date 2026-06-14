@@ -9,6 +9,7 @@ export interface WeaponStatus {
   maxAmmo: number;
   isReloading: boolean;
   reloadTimeRemaining: number;
+  reloadDuration: number;
 }
 
 export class WeaponSystem {
@@ -33,6 +34,8 @@ export class WeaponSystem {
   private camera: THREE.PerspectiveCamera;
   private otherPlayers: Map<string, THREE.Group>;
   private onHitCallback?: (targetId: string, damage: number, hitPoint: THREE.Vector3, distance: number) => void;
+  private readonly timeouts = new Set<number>();
+  private readonly transientOverlays = new Set<HTMLElement>();
 
   constructor(
     scene: THREE.Scene,
@@ -200,7 +203,8 @@ export class WeaponSystem {
       ammo: this.ammo,
       maxAmmo: this.maxAmmo,
       isReloading: this.isReloading,
-      reloadTimeRemaining
+      reloadTimeRemaining,
+      reloadDuration: this.reloadDuration
     };
   }
 
@@ -232,7 +236,7 @@ export class WeaponSystem {
     this.scene.add(this.muzzleFlash);
     
     // 100ms 후 제거
-    setTimeout(() => {
+    this.scheduleTimeout(() => {
       if (this.muzzleFlash) {
         this.scene.remove(this.muzzleFlash);
         this.muzzleFlash.geometry.dispose();
@@ -245,11 +249,15 @@ export class WeaponSystem {
   private createMuzzleFlashOverlay() {
     const overlay = document.createElement('div');
     overlay.className = 'muzzle-flash-overlay';
+    this.transientOverlays.add(overlay);
     document.body.appendChild(overlay);
     
     // 애니메이션 종료 후 제거
     overlay.addEventListener('animationend', () => {
-      document.body.removeChild(overlay);
+      this.transientOverlays.delete(overlay);
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
     });
   }
 
@@ -267,7 +275,7 @@ export class WeaponSystem {
     this.scene.add(marker);
     
     // 1초 후 제거
-    setTimeout(() => {
+    this.scheduleTimeout(() => {
       this.scene.remove(marker);
       geometry.dispose();
       material.dispose();
@@ -275,4 +283,35 @@ export class WeaponSystem {
   }
 
   // (삭제됨) 월드 스페이스 조준점 유틸은 더 이상 사용하지 않습니다.
+
+  public dispose(): void {
+    this.timeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    this.timeouts.clear();
+
+    this.transientOverlays.forEach((overlay) => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    });
+    this.transientOverlays.clear();
+
+    if (this.muzzleFlash) {
+      this.scene.remove(this.muzzleFlash);
+      this.muzzleFlash.geometry.dispose();
+      (this.muzzleFlash.material as THREE.Material).dispose();
+      this.muzzleFlash = null;
+    }
+
+    this.visualBullets.forEach((bullet) => bullet.dispose());
+    this.visualBullets = [];
+  }
+
+  private scheduleTimeout(callback: () => void, delayMs: number): void {
+    const timeoutId = window.setTimeout(() => {
+      this.timeouts.delete(timeoutId);
+      callback();
+    }, delayMs);
+
+    this.timeouts.add(timeoutId);
+  }
 }

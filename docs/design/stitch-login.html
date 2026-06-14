@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DOGFIGHT - Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&amp;family=Space+Mono:wght@400;700&amp;family=Public+Sans:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "bg-base": "#070B12",
+                        "bg-panel": "#0C1320",
+                        "bg-raised": "#111A2B",
+                        "primary": "#3399FF",
+                        "primary-bright": "#66CCFF",
+                        "status-ok": "#4CAF50",
+                        "status-caution": "#FFC107",
+                        "status-danger": "#F44336",
+                        "text-primary": "#E6F1FF",
+                        "text-secondary": "#8FA9C8",
+                        "text-muted": "#5A7290",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk", "sans-serif"],
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "body": ["Space Grotesk", "sans-serif"],
+                        "label": ["Public Sans", "sans-serif"],
+                        "mono": ["Space Mono", "monospace"]
+                    },
+                    boxShadow: {
+                        'glow': '0 0 12px rgba(51, 153, 255, 0.45)',
+                        'glow-hover': '0 0 20px rgba(102, 204, 255, 0.6)',
+                        'panel': '0 4px 20px rgba(7, 11, 18, 0.8)',
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        .vignette {
+            background: radial-gradient(circle, rgba(0,0,0,0) 40%, rgba(7,11,18,0.9) 100%);
+            pointer-events: none;
+        }
+        .corner-bracket-tl {
+            position: absolute; top: -1px; left: -1px; width: 12px; height: 12px;
+            border-top: 2px solid #3399FF; border-left: 2px solid #3399FF;
+            box-shadow: -2px -2px 8px rgba(51,153,255,0.3);
+        }
+        .corner-bracket-tr {
+            position: absolute; top: -1px; right: -1px; width: 12px; height: 12px;
+            border-top: 2px solid #3399FF; border-right: 2px solid #3399FF;
+            box-shadow: 2px -2px 8px rgba(51,153,255,0.3);
+        }
+        .corner-bracket-bl {
+            position: absolute; bottom: -1px; left: -1px; width: 12px; height: 12px;
+            border-bottom: 2px solid #3399FF; border-left: 2px solid #3399FF;
+            box-shadow: -2px 2px 8px rgba(51,153,255,0.3);
+        }
+        .corner-bracket-br {
+            position: absolute; bottom: -1px; right: -1px; width: 12px; height: 12px;
+            border-bottom: 2px solid #3399FF; border-right: 2px solid #3399FF;
+            box-shadow: 2px 2px 8px rgba(51,153,255,0.3);
+        }
+        .text-glow {
+            text-shadow: 0 0 8px rgba(51, 153, 255, 0.6);
+        }
+        .input-underline {
+            background: linear-gradient(to right, transparent, #3399FF, transparent);
+            height: 1px;
+            width: 100%;
+            bottom: 0;
+            position: absolute;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+        input:focus + .input-underline {
+            opacity: 1;
+            box-shadow: 0 0 8px rgba(51, 153, 255, 0.8);
+        }
+        .bg-grid {
+            background-image: 
+                linear-gradient(to right, rgba(51,153,255,0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(51,153,255,0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-bg-base text-text-primary font-body overflow-hidden h-screen w-screen relative">
+<!-- Background Layer -->
+<div class="absolute inset-0 z-0">
+<div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://lh3.googleusercontent.com/aida/AP1WRLs9GQihPSYM3Ai8vwMUEkPGSOmdlmqJqoYVobuDYh2IYv96NI095TWzhI17wSG-ecixfkgmdBpqNqYrT7bCGZbeTxsUSJmZOl29OQb1VNk1-EK5yL5jiWHXogOGGlRQyFnI_yrZqFgHxxO9k1C9dggDHTZnOEAuXLvLLALEBuCP-OEDb5uasov2KplsM7rKWQiudypfzVJlfPOWHO9hWGZRmM8U4rgF2-a0aIKWHZyEIRZpCxbAiYOI7JRg'); filter: blur(6px) brightness(0.4);"></div>
+<div class="absolute inset-0 scanlines z-10"></div>
+<div class="absolute inset-0 vignette z-20"></div>
+<div class="absolute inset-0 bg-grid z-30 perspective-grid" style="transform: perspective(1000px) rotateX(60deg) scale(2); transform-origin: bottom; opacity: 0.3;"></div>
+</div>
+<!-- Main Content Canvas -->
+<main class="relative z-40 h-full flex flex-col items-center justify-center p-6">
+<!-- Status Row -->
+<div class="flex gap-4 mb-8 font-mono text-xs text-primary/80 tracking-widest backdrop-blur-sm bg-bg-panel/40 px-4 py-2 rounded border border-primary/20">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-status-ok shadow-[0_0_8px_#4CAF50]"></div>
+<span>SERVER ONLINE</span>
+</div>
+<div class="text-text-muted">|</div>
+<div>REGION KR</div>
+<div class="text-text-muted">|</div>
+<div>24MS PING</div>
+</div>
+<!-- Login Modal Card -->
+<div class="relative w-full max-w-md bg-bg-panel/80 backdrop-blur-md border border-primary/30 p-8 shadow-panel rounded-sm">
+<!-- Corner Brackets -->
+<div class="corner-bracket-tl"></div>
+<div class="corner-bracket-tr"></div>
+<div class="corner-bracket-bl"></div>
+<div class="corner-bracket-br"></div>
+<!-- Top Accent Bar -->
+<div class="absolute top-0 left-0 w-full h-[2px] bg-primary shadow-[0_0_8px_#3399FF]"></div>
+<!-- Header -->
+<div class="text-center mb-10 mt-2">
+<h1 class="text-4xl font-headline font-black uppercase text-primary tracking-[0.2em] mb-2 text-glow">게임 입장</h1>
+<p class="text-text-secondary text-sm font-label">사용자명을 입력하여 게임에 참가하세요.</p>
+</div>
+<!-- Form -->
+<form class="flex flex-col gap-6">
+<!-- Input Group -->
+<div class="relative">
+<label class="block text-primary/80 font-mono text-xs mb-2 tracking-widest">CALLSIGN</label>
+<div class="relative">
+<input autocomplete="off" class="w-full bg-bg-raised/50 border-none text-text-primary px-4 py-3 font-mono focus:ring-0 focus:outline-none placeholder-text-muted" placeholder="사용자명 (2-20자)" spellcheck="false" type="text"/>
+<div class="input-underline"></div>
+</div>
+<!-- Decorative scanner line -->
+<div class="absolute left-0 w-[2px] h-full bg-primary/40 top-0"></div>
+</div>
+<!-- Error Slot (Empty) -->
+<div class="hidden border border-status-danger/50 bg-status-danger/10 text-status-danger text-xs font-mono p-3 rounded-sm">
+<span class="material-symbols-outlined text-[16px] inline-block align-middle mr-1" style="font-variation-settings: 'FILL' 0;">warning</span>
+                    ERROR: INVALID CALLSIGN FORMAT
+                </div>
+<!-- Primary Button -->
+<button class="w-full bg-primary/20 hover:bg-primary/30 text-primary border border-primary/50 py-4 px-6 font-headline font-bold uppercase tracking-widest transition-all shadow-glow hover:shadow-glow-hover flex items-center justify-center gap-3 group mt-4" type="button">
+<span>게임 시작</span>
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform" style="font-variation-settings: 'FILL' 1;">power_settings_new</span>
+</button>
+<!-- Loading Hint -->
+<div class="text-center mt-2">
+<span class="text-text-muted font-mono text-[10px] uppercase tracking-widest animate-pulse opacity-0">연결 중...</span>
+</div>
+</form>
+</div>
+<!-- Footer Readout -->
+<div class="absolute bottom-6 font-mono text-[10px] text-text-muted tracking-widest flex items-center gap-4">
+<span>DOGFIGHT v2.4.1</span>
+<span class="w-1 h-1 bg-text-muted rounded-full"></span>
+<span>SECURE CONNECTION</span>
+<span class="w-1 h-1 bg-text-muted rounded-full"></span>
+<span>SYS.READY</span>
+</div>
+</main>
+<!-- Global Nav/Shell suppression logic applied: Transactional/Login screen. SideNav and TopAppBar omitted. -->
+<script>
+        // Simple micro-interaction for button click simulation
+        const btn = document.querySelector('button');
+        const loadingHint = document.querySelector('.animate-pulse');
+        
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            btn.classList.add('bg-primary/40', 'scale-[0.98]');
+            setTimeout(() => btn.classList.remove('bg-primary/40', 'scale-[0.98]'), 150);
+            
+            loadingHint.classList.remove('opacity-0');
+            loadingHint.textContent = 'CONNECTING...';
+            
+            setTimeout(() => {
+                loadingHint.textContent = 'UPLINK ESTABLISHED';
+                loadingHint.classList.add('text-status-ok');
+            }, 1500);
+        });
+    </script>
+</body></html>

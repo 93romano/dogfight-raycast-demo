@@ -1,6 +1,9 @@
 /**
  * Player authentication input component
- * Handles username-based authentication for database integration
+ * Handles username-based authentication for database integration.
+ *
+ * Visual design: "Modern Military HUD" login screen generated with Google Stitch
+ * (see docs/design/stitch-login.html). Logic and public API are unchanged.
  */
 export interface PlayerAuthenticationResult {
   success: boolean;
@@ -15,164 +18,214 @@ export interface PlayerIdInputOptions {
   onError: (error: Error) => void;
 }
 
+const C = {
+  bgBase: '#070B12',
+  panel: '#0C1320',
+  raised: '#111A2B',
+  primary: '#3399FF',
+  primaryBright: '#66CCFF',
+  danger: '#F44336',
+  text: '#E6F1FF',
+  text2: '#8FA9C8',
+  muted: '#5A7290',
+  fontHead: "'Space Grotesk', 'Noto Sans KR', sans-serif",
+  fontMono: "'Space Mono', 'Noto Sans KR', monospace"
+};
+
 export class PlayerIdInput {
-  private container: HTMLDivElement;
-  private usernameInput: HTMLInputElement;
-  private submitButton: HTMLButtonElement;
-  private errorMessage: HTMLDivElement;
+  private container!: HTMLDivElement;
+  private card!: HTMLDivElement;
+  private usernameInput!: HTMLInputElement;
+  private submitButton!: HTMLButtonElement;
+  private errorMessage!: HTMLDivElement;
+  private loadingHint!: HTMLDivElement;
   private options: PlayerIdInputOptions;
   private isSubmitting: boolean = false;
+  private readonly abortController = new AbortController();
 
   constructor(options: PlayerIdInputOptions) {
     this.options = options;
     this.createUI();
   }
 
-  /**
-   * Creates the authentication UI elements
-   */
+  /** Adds the four glowing L-shaped HUD corner brackets to an element. */
+  private addBrackets(target: HTMLElement): void {
+    const specs: Array<[string, string]> = [
+      ['top:-1px;left:-1px', 'border-top:2px solid;border-left:2px solid'],
+      ['top:-1px;right:-1px', 'border-top:2px solid;border-right:2px solid'],
+      ['bottom:-1px;left:-1px', 'border-bottom:2px solid;border-left:2px solid'],
+      ['bottom:-1px;right:-1px', 'border-bottom:2px solid;border-right:2px solid']
+    ];
+    specs.forEach(([pos, border]) => {
+      const b = document.createElement('div');
+      b.style.cssText = `position:absolute;width:14px;height:14px;border-color:${C.primary};${pos};${border};`;
+      target.appendChild(b);
+    });
+  }
+
+  private createStatusChips(): HTMLDivElement {
+    const chips = document.createElement('div');
+    chips.style.cssText = `
+      display:flex;gap:14px;align-items:center;margin-bottom:26px;
+      font-family:${C.fontMono};font-size:11px;letter-spacing:.18em;color:${C.primary};
+      background:rgba(12,19,32,.5);backdrop-filter:blur(6px);
+      padding:8px 16px;border:1px solid rgba(51,153,255,.2);
+    `;
+    chips.innerHTML = `
+      <span style="display:flex;align-items:center;gap:7px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#4CAF50;box-shadow:0 0 8px #4CAF50;"></span>SERVER ONLINE
+      </span>
+      <span style="color:${C.muted};">|</span><span>REGION KR</span>
+      <span style="color:${C.muted};">|</span><span>24MS PING</span>
+    `;
+    return chips;
+  }
+
+  /** Creates the authentication UI elements */
   private createUI(): void {
-    // 컨테이너 생성
+    document.body.classList.add('state-login');
+
+    // Full-screen dimmed/blurred backdrop over the live scene.
     this.container = document.createElement('div');
     this.container.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.9);
-      border: 2px solid #3399ff;
-      border-radius: 10px;
-      padding: 30px;
-      text-align: center;
-      z-index: 1000;
-      color: white;
-      font-family: Arial, sans-serif;
-      min-width: 320px;
+      position:fixed;inset:0;z-index:1000;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:radial-gradient(circle, rgba(7,11,18,.55) 0%, rgba(7,11,18,.85) 100%);
+      backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+      color:${C.text};font-family:${C.fontHead};
     `;
 
-    // 제목
-    const title = document.createElement('h2');
+    this.container.appendChild(this.createStatusChips());
+
+    // Login card
+    this.card = document.createElement('div');
+    this.card.style.cssText = `
+      position:relative;width:380px;max-width:88vw;
+      background:rgba(12,19,32,.8);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      border:1px solid rgba(51,153,255,.3);padding:34px 30px;
+      box-shadow:0 4px 24px rgba(7,11,18,.8);
+    `;
+    this.addBrackets(this.card);
+
+    // top accent bar
+    const accent = document.createElement('div');
+    accent.style.cssText = `position:absolute;top:0;left:0;width:100%;height:2px;background:${C.primary};box-shadow:0 0 8px ${C.primary};`;
+    this.card.appendChild(accent);
+
+    // header
+    const title = document.createElement('h1');
     title.textContent = '게임 입장';
     title.style.cssText = `
-      margin: 0 0 20px 0;
-      color: #3399ff;
-      font-size: 24px;
+      margin:6px 0 8px;text-align:center;color:${C.primary};
+      font-family:${C.fontHead};font-weight:900;font-size:30px;
+      letter-spacing:.18em;text-transform:uppercase;text-shadow:0 0 8px rgba(51,153,255,.6);
     `;
-    this.container.appendChild(title);
+    this.card.appendChild(title);
 
-    // 설명
     const description = document.createElement('p');
     description.textContent = '사용자명을 입력하여 게임에 참가하세요';
-    description.style.cssText = `
-      margin: 0 0 25px 0;
-      color: #cccccc;
-      font-size: 14px;
-      line-height: 1.4;
-    `;
-    this.container.appendChild(description);
+    description.style.cssText = `margin:0 0 28px;text-align:center;color:${C.text2};font-size:13px;`;
+    this.card.appendChild(description);
 
-    // 사용자명 입력 필드
+    // CALLSIGN label
+    const label = document.createElement('label');
+    label.textContent = 'CALLSIGN';
+    label.style.cssText = `display:block;color:${C.primary};font-family:${C.fontMono};font-size:11px;letter-spacing:.2em;margin-bottom:8px;`;
+    this.card.appendChild(label);
+
+    // input + underline
+    const inputWrap = document.createElement('div');
+    inputWrap.style.cssText = 'position:relative;margin-bottom:18px;';
+
     this.usernameInput = document.createElement('input');
     this.usernameInput.type = 'text';
     this.usernameInput.placeholder = '사용자명 (2-20자)';
     this.usernameInput.maxLength = 20;
+    this.usernameInput.autocomplete = 'off';
+    this.usernameInput.spellcheck = false;
     this.usernameInput.style.cssText = `
-      width: 240px;
-      padding: 12px 15px;
-      font-size: 16px;
-      border: 2px solid #3399ff;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-      text-align: center;
-      margin-bottom: 20px;
-      display: block;
-      margin-left: auto;
-      margin-right: auto;
-      outline: none;
-      transition: border-color 0.3s, background-color 0.3s;
+      width:100%;box-sizing:border-box;background:rgba(17,26,43,.5);border:none;
+      color:${C.text};padding:13px 14px;font-family:${C.fontMono};font-size:15px;outline:none;
     `;
+    inputWrap.appendChild(this.usernameInput);
 
-    // 포커스 스타일
+    const underline = document.createElement('div');
+    underline.style.cssText = `position:absolute;bottom:0;left:0;width:100%;height:1px;opacity:.5;background:linear-gradient(to right,transparent,${C.primary},transparent);transition:opacity .3s,box-shadow .3s;`;
+    inputWrap.appendChild(underline);
+    this.card.appendChild(inputWrap);
+
     this.usernameInput.addEventListener('focus', () => {
-      this.usernameInput.style.borderColor = '#66ccff';
-      this.usernameInput.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-    });
-
+      underline.style.opacity = '1';
+      underline.style.boxShadow = '0 0 8px rgba(51,153,255,.8)';
+    }, { signal: this.abortController.signal });
     this.usernameInput.addEventListener('blur', () => {
-      this.usernameInput.style.borderColor = '#3399ff';
-      this.usernameInput.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-    });
+      underline.style.opacity = '.5';
+      underline.style.boxShadow = 'none';
+    }, { signal: this.abortController.signal });
 
-    this.container.appendChild(this.usernameInput);
-
-    // 에러 메시지
+    // error slot
     this.errorMessage = document.createElement('div');
     this.errorMessage.style.cssText = `
-      color: #ff6666;
-      font-size: 14px;
-      margin-bottom: 20px;
-      display: none;
-      min-height: 20px;
-      padding: 8px;
-      background: rgba(255, 102, 102, 0.1);
-      border-radius: 5px;
-      border: 1px solid rgba(255, 102, 102, 0.3);
+      display:none;margin-bottom:18px;padding:10px 12px;
+      color:${C.danger};font-family:${C.fontMono};font-size:12px;
+      background:rgba(244,67,54,.1);border:1px solid rgba(244,67,54,.4);
     `;
-    this.container.appendChild(this.errorMessage);
+    this.card.appendChild(this.errorMessage);
 
-    // 버튼
+    // submit button
     this.submitButton = document.createElement('button');
-    this.submitButton.textContent = '게임 시작';
+    this.submitButton.type = 'button';
+    this.submitButton.innerHTML = `<span>게임 시작</span><span class="material-symbols-outlined" style="font-size:20px;">power_settings_new</span>`;
     this.submitButton.style.cssText = `
-      background: #3399ff;
-      color: white;
-      border: none;
-      padding: 12px 40px;
-      font-size: 16px;
-      font-weight: bold;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s;
-      outline: none;
+      width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+      background:rgba(51,153,255,.2);color:${C.primary};border:1px solid rgba(51,153,255,.5);
+      padding:15px;font-family:${C.fontHead};font-weight:700;font-size:15px;
+      letter-spacing:.18em;text-transform:uppercase;cursor:pointer;
+      box-shadow:0 0 12px rgba(51,153,255,.45);transition:all .2s;outline:none;
     `;
-
-    // 버튼 호버 효과
     this.submitButton.addEventListener('mouseenter', () => {
       if (!this.submitButton.disabled) {
-        this.submitButton.style.background = '#2288ee';
-        this.submitButton.style.transform = 'translateY(-1px)';
+        this.submitButton.style.background = 'rgba(51,153,255,.3)';
+        this.submitButton.style.boxShadow = '0 0 20px rgba(102,204,255,.6)';
       }
-    });
-
+    }, { signal: this.abortController.signal });
     this.submitButton.addEventListener('mouseleave', () => {
       if (!this.submitButton.disabled) {
-        this.submitButton.style.background = '#3399ff';
-        this.submitButton.style.transform = 'translateY(0)';
+        this.submitButton.style.background = 'rgba(51,153,255,.2)';
+        this.submitButton.style.boxShadow = '0 0 12px rgba(51,153,255,.45)';
       }
-    });
+    }, { signal: this.abortController.signal });
+    this.card.appendChild(this.submitButton);
 
-    this.container.appendChild(this.submitButton);
+    // loading hint
+    this.loadingHint = document.createElement('div');
+    this.loadingHint.style.cssText = `text-align:center;margin-top:12px;height:14px;color:${C.muted};font-family:${C.fontMono};font-size:10px;letter-spacing:.2em;text-transform:uppercase;opacity:0;transition:opacity .3s;`;
+    this.card.appendChild(this.loadingHint);
 
-    // 이벤트 리스너 추가
+    this.container.appendChild(this.card);
+
+    // footer readout
+    const footer = document.createElement('div');
+    footer.style.cssText = `position:absolute;bottom:26px;display:flex;gap:12px;align-items:center;color:${C.muted};font-family:${C.fontMono};font-size:10px;letter-spacing:.2em;`;
+    footer.innerHTML = `<span>DOGFIGHT v0.9.1</span><span style="width:3px;height:3px;border-radius:50%;background:${C.muted};"></span><span>SECURE CONNECTION</span><span style="width:3px;height:3px;border-radius:50%;background:${C.muted};"></span><span>SYS.READY</span>`;
+    this.container.appendChild(footer);
+
+    // events
     this.usernameInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         this.submitAuthentication();
       }
-    });
+    }, { signal: this.abortController.signal });
 
     this.usernameInput.addEventListener('input', () => {
       this.hideError();
-    });
+    }, { signal: this.abortController.signal });
 
     this.submitButton.addEventListener('click', () => {
       this.submitAuthentication();
-    });
+    }, { signal: this.abortController.signal });
 
-    // 페이지에 추가
     document.body.appendChild(this.container);
-    
-    // 사용자명 입력 필드에 포커스
     this.usernameInput.focus();
   }
 
@@ -188,7 +241,7 @@ export class PlayerIdInput {
       this.hideError();
 
       const username = this.usernameInput.value.trim();
-      
+
       // Input validation
       if (!this.validateInput(username)) {
         return;
@@ -196,9 +249,6 @@ export class PlayerIdInput {
 
       // Attempt authentication
       const result = await this.options.onAuthentication(username);
-
-      console.log('username', this);
-      console.log('result', result);
 
       if (result.success) {
         this.hide();
@@ -259,11 +309,9 @@ export class PlayerIdInput {
   private showError(message: string): void {
     this.errorMessage.textContent = message;
     this.errorMessage.style.display = 'block';
-    
-    // 에러 애니메이션
     this.errorMessage.style.opacity = '0';
-    this.errorMessage.style.transform = 'translateY(-10px)';
-    
+    this.errorMessage.style.transform = 'translateY(-6px)';
+
     setTimeout(() => {
       this.errorMessage.style.transition = 'all 0.3s ease';
       this.errorMessage.style.opacity = '1';
@@ -284,17 +332,24 @@ export class PlayerIdInput {
   private setLoading(isLoading: boolean): void {
     this.submitButton.disabled = isLoading;
     this.usernameInput.disabled = isLoading;
-    
+
     if (isLoading) {
-      this.submitButton.textContent = '연결 중...';
-      this.submitButton.style.background = '#666666';
+      this.submitButton.innerHTML = '<span>연결 중...</span>';
+      this.submitButton.style.background = 'rgba(90,114,144,.3)';
+      this.submitButton.style.color = C.muted;
+      this.submitButton.style.boxShadow = 'none';
       this.submitButton.style.cursor = 'not-allowed';
       this.usernameInput.style.opacity = '0.6';
+      this.loadingHint.style.opacity = '1';
+      this.loadingHint.textContent = 'CONNECTING...';
     } else {
-      this.submitButton.textContent = '게임 시작';
-      this.submitButton.style.background = '#3399ff';
+      this.submitButton.innerHTML = `<span>게임 시작</span><span class="material-symbols-outlined" style="font-size:20px;">power_settings_new</span>`;
+      this.submitButton.style.background = 'rgba(51,153,255,.2)';
+      this.submitButton.style.color = C.primary;
+      this.submitButton.style.boxShadow = '0 0 12px rgba(51,153,255,.45)';
       this.submitButton.style.cursor = 'pointer';
       this.usernameInput.style.opacity = '1';
+      this.loadingHint.style.opacity = '0';
     }
   }
 
@@ -302,11 +357,13 @@ export class PlayerIdInput {
    * Hides the authentication form with fade-out animation
    */
   public hide(): void {
+    this.abortController.abort();
+    document.body.classList.remove('state-login');
+
     if (this.container.parentNode) {
-      this.container.style.transition = 'all 0.3s ease';
+      this.container.style.transition = 'opacity 0.3s ease';
       this.container.style.opacity = '0';
-      this.container.style.transform = 'translate(-50%, -50%) scale(0.9)';
-      
+
       setTimeout(() => {
         if (this.container.parentNode) {
           this.container.parentNode.removeChild(this.container);
@@ -314,4 +371,13 @@ export class PlayerIdInput {
       }, 300);
     }
   }
-} 
+
+  public dispose(): void {
+    this.abortController.abort();
+    document.body.classList.remove('state-login');
+
+    if (this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+  }
+}
