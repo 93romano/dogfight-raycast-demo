@@ -16,8 +16,8 @@ export class MessageHandler {
       return;
     }
 
-    // 입력 데이터 검증
-    if (!event.input) {
+    // 입력 데이터 검증 (event 자체가 없을 수도 있으므로 함께 가드)
+    if (!event || !event.input) {
       return;
     }
 
@@ -87,7 +87,9 @@ export class MessageHandler {
       
       switch (data.type) {
         case 'movement':
-          await this.handleMovementEvent(playerId, data, ws);
+          // 클라이언트는 { type, event:{input,position,rotation,speed}, playerId } 형태로 보낸다.
+          // 핸들러는 내부 event 객체를 기대하므로 data.event를 전달한다.
+          await this.handleMovementEvent(playerId, data.event, ws);
           break;
           
         case 'hit':

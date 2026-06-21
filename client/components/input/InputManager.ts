@@ -44,16 +44,6 @@ export class InputManager {
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === canvas;
     }, { signal: this.abortController.signal });
-
-    // document.addEventListener('mousemove', (event) => {
-    //   if (this.isPointerLocked) {
-    //     this.targetYaw -= event.movementX * this.mouseSensitivity;
-    //     this.targetPitch -= event.movementY * this.mouseSensitivity;
-        
-    //     const pitchLimit = Math.PI / 2 - 0.01;
-    //     this.targetPitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.targetPitch));
-    //   }
-    // });
   }
 
   private initEvents() {
@@ -68,7 +58,6 @@ export class InputManager {
     document.addEventListener('keydown', (event) => {
       if (this.isPointerLocked) {
         if (this.onShootCallback && event.code === 'Space') {
-          console.log('onShootCallback');
           this.onShootCallback();
         } else if (this.onReloadCallback && event.code === 'KeyR') {
           this.onReloadCallback();
