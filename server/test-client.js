@@ -55,7 +55,13 @@ function parseBinaryStateUpdate(buffer) {
     flags: buf.readUInt8(7),
   };
 
-  const playerCount = (buf.length - HEADER_SIZE) / PLAYER_STATE_SIZE;
+  // 상태 업데이트(0x01) 패킷만 플레이어 배열로 파싱
+  if (header.packetType !== 0x01) {
+    return { header, players: [] };
+  }
+
+  // floor 처리로 정렬되지 않은 버퍼의 끝부분을 OOB로 읽어 프로세스가 죽는 것을 방지
+  const playerCount = Math.floor((buf.length - HEADER_SIZE) / PLAYER_STATE_SIZE);
   const players = [];
 
   for (let i = 0; i < playerCount; i++) {
@@ -98,9 +104,9 @@ class TestClient {
         log(this.username, '연결 성공');
       });
 
-      this.ws.on('message', (data) => {
-        // 바이너리 메시지
-        if (data instanceof ArrayBuffer || Buffer.isBuffer(data)) {
+      this.ws.on('message', (data, isBinary) => {
+        // 바이너리 메시지 (ws는 텍스트 프레임도 Buffer로 전달하므로 isBinary로 판별)
+        if (isBinary) {
           const parsed = parseBinaryStateUpdate(data);
           if (parsed) {
             this.binaryMessages.push(parsed);

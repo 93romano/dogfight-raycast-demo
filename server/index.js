@@ -3,7 +3,7 @@
 import { createServer } from 'http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { Buffer } from 'buffer';
-import { pgPool, redisClient } from './config/database.js';
+import { pgPool, redisClient, redisPubSub } from './config/database.js';
 import GameEventService from './services/GameEventService.js';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
@@ -58,14 +58,12 @@ if (process.env.NODE_ENV === 'development') {
 redisManager.on = redisManager.on || (() => {}); // EventEmitter 기능이 없으면 추가
 redisManager.handleForceDisconnect = (message) => {
   try {
-    const { playerId, oldWsId, serverId, reason } = JSON.parse(message);
-    
-    // 다른 서버에서 온 요청이거나, 현재 서버의 이전 연결인 경우 처리
-    if (serverId !== SERVER_ID || true) { // 모든 요청 처리
-      const disconnected = webSocketManager.forceDisconnectByWsId(oldWsId, reason);
-      if (disconnected) {
-        console.log(`🔌 Force disconnected Player ${playerId} (wsId: ${oldWsId}): ${reason}`);
-      }
+    const { playerId, oldWsId, reason } = JSON.parse(message);
+
+    // 출처 서버와 무관하게 모든 강제 해제 요청을 처리
+    const disconnected = webSocketManager.forceDisconnectByWsId(oldWsId, reason);
+    if (disconnected) {
+      console.log(`🔌 Force disconnected Player ${playerId} (wsId: ${oldWsId}): ${reason}`);
     }
   } catch (error) {
     console.error('Error processing force disconnect message:', error);
@@ -87,6 +85,44 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // WebSocket 연결 처리
+/**
+ * 플레이어 연결 종료 시 모든 상태(게임 상태/연결/Redis/매치)를 정리하고 다른
+ * 플레이어에게 퇴장을 알린다. 'close' 이벤트와 비활성 타임아웃 양쪽에서 호출되며,
+ * gameState 존재 여부로 멱등성을 보장한다(먼저 도달한 호출만 실제 정리를 수행).
+ */
+async function cleanupPlayer(playerId, userId, reason = 'disconnect') {
+  if (!gameState.getPlayer(playerId)) {
+    return; // 이미 다른 경로에서 정리됨
+  }
+
+  console.log(`👋 Player ${playerId} disconnected (${reason})`);
+
+  // 인메모리 상태부터 동기적으로 제거 — 이후 비동기 정리가 실패해도 유령이 남지 않도록
+  gameState.removePlayer(playerId);
+  connectionManager.removeConnection(playerId);
+
+  // 외부 상태 정리는 best-effort (하나가 실패해도 나머지는 진행)
+  try {
+    await redisManager.clearPlayerConnectionState(playerId, userId, gameState.getCurrentMatch());
+  } catch (error) {
+    console.error(`Error clearing Redis state for Player ${playerId}:`, error);
+  }
+  try {
+    await matchManager.removePlayerFromMatch(playerId, userId);
+  } catch (error) {
+    console.error(`Error removing Player ${playerId} from match:`, error);
+  }
+
+  // 다른 플레이어들에게 퇴장 알림
+  webSocketManager.broadcast(JSON.stringify({
+    type: 'player-left',
+    id: playerId.toString()
+  }));
+}
+
+// 비활성 타임아웃 정리도 동일한 로직을 재사용 (죽은 소켓의 유령 플레이어 방지)
+connectionManager.onInactiveDisconnect = cleanupPlayer;
+
 wss.on('connection', async (ws, req) => {
   console.log('🔥 New connection');
   
@@ -171,19 +207,21 @@ wss.on('connection', async (ws, req) => {
   
   // 게임 상태에 플레이어 추가
   gameState.addPlayer(playerId);
-  console.log('gameState', gameState);
-  console.log('gameState.getAllPlayers()', gameState.getAllPlayers());
-  // Send initial state
-  ws.send(BinaryProtocol.createStateUpdateBuffer(gameState.getAllPlayers()));
 
-  // Send welcome message
-  ws.send(JSON.stringify({
-    type: 'welcome',
-    playerId: playerId,
-    userId: userId,
-    username: username,
-    matchId: gameState.getCurrentMatch()
-  }));
+  // 클라이언트가 셋업 도중 끊겼을 수 있으므로 초기 전송 전에 연결 상태 확인
+  if (ws.readyState === WebSocket.OPEN) {
+    // Send initial state
+    ws.send(BinaryProtocol.createStateUpdateBuffer(gameState.getAllPlayers()));
+
+    // Send welcome message
+    ws.send(JSON.stringify({
+      type: 'welcome',
+      playerId: playerId,
+      userId: userId,
+      username: username,
+      matchId: gameState.getCurrentMatch()
+    }));
+  }
   
   // 다른 플레이어들에게 새 플레이어 참가 알림
   const joinMessage = JSON.stringify({
@@ -207,27 +245,7 @@ wss.on('connection', async (ws, req) => {
   
   // 연결 종료 처리
   ws.on('close', async () => {
-    console.log(`👋 Player ${playerId} disconnected`);
-    
-    // Redis 연결 상태 정리
-    await redisManager.clearPlayerConnectionState(playerId, userId, gameState.getCurrentMatch());
-    
-    // 게임 상태에서 플레이어 제거
-    gameState.removePlayer(playerId);
-    
-    // 연결 관리자에서 제거
-    connectionManager.removeConnection(playerId);
-    
-    // 매치에서 플레이어 제거
-    await matchManager.removePlayerFromMatch(playerId, userId);
-    
-    // 다른 플레이어들에게 플레이어 퇴장 알림
-    const leaveMessage = JSON.stringify({
-      type: 'player-left',
-      id: playerId.toString()
-    });
-    
-    webSocketManager.broadcast(leaveMessage);
+    await cleanupPlayer(playerId, userId, 'connection closed');
   });
   
   // 에러 처리

@@ -3,10 +3,14 @@
 export class ConnectionManager {
   constructor() {
     this.activeConnections = new Map(); // playerId -> { ws, lastActivity, userId, username }
-    this.inactiveTimeout = 120000; // 2분
-    
-    // 30초마다 비활성 사용자 체크
-    this.inactiveCheckInterval = setInterval(() => this.checkInactiveUsers(), 30000);
+    this.inactiveTimeout = Number(process.env.INACTIVE_TIMEOUT_MS) || 120000; // 2분
+    this.inactiveCheckMs = Number(process.env.INACTIVE_CHECK_MS) || 30000;
+
+    // 비활성 플레이어를 완전히 정리하기 위한 콜백 (index.js에서 cleanupPlayer 주입)
+    this.onInactiveDisconnect = null;
+
+    // 주기적으로 비활성 사용자 체크
+    this.inactiveCheckInterval = setInterval(() => this.checkInactiveUsers(), this.inactiveCheckMs);
   }
 
   addConnection(playerId, ws, userId, username) {
@@ -57,12 +61,20 @@ export class ConnectionManager {
       
       if (inactiveTime > this.inactiveTimeout) {
         console.log(`⏰ Player ${playerId} (${connection.username}) inactive for ${Math.round(inactiveTime / 1000)}s - disconnecting`);
-        
-        // 연결 강제 종료
+
+        // 소켓이 살아있으면 정상 종료 시도
         if (connection.ws && connection.ws.readyState === 1) { // WebSocket.OPEN
           connection.ws.close(1000, 'Inactive timeout');
         }
-        
+
+        // 'close' 이벤트에만 의존하지 않고 전체 정리를 직접 호출한다.
+        // (죽은 소켓은 'close'를 발생시키지 않아 gameState에 유령 플레이어가 남는다)
+        // cleanupPlayer는 멱등하므로 이후 'close'가 발생해도 중복 정리는 no-op이다.
+        if (this.onInactiveDisconnect) {
+          Promise.resolve(this.onInactiveDisconnect(playerId, connection.userId))
+            .catch((err) => console.error(`Error during inactive cleanup for Player ${playerId}:`, err));
+        }
+
         inactiveUsers.push(playerId);
       }
     }

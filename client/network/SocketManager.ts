@@ -33,7 +33,6 @@ export class SocketManager {
   private playerId: number | null = null;
   private username: string | null = null;
   private lastSentState: PlayerState | null = null;
-  private lastSentMovement: MovementEvent | null = null;
   private readonly stateThreshold = 0.1; // 위치 변화 임계값
   private readonly rotationThreshold = 0.01; // 회전 변화 임계값
   
@@ -261,7 +260,6 @@ export class SocketManager {
   }
 
   private processStateUpdate(buffer: Uint8Array) {
-    console.log('processStateUpdate', buffer);
     const HEADER_SIZE = 8;
     const PLAYER_STATE_SIZE = 46;
     let offset = HEADER_SIZE;
@@ -417,7 +415,14 @@ export class SocketManager {
   private reconnect() {
     console.log('🔄 Attempting to reconnect...');
     if (this.socket) {
-      this.socket.close();
+      // Detach handlers so closing the stale socket doesn't trigger a second
+      // reconnect via onclose → scheduleReconnect(). connect() below is the
+      // single reconnection path.
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onerror = null;
+      this.socket.onclose = null;
+      this.socket.close(1000, 'reconnect');
     }
     this.connect();
   }
@@ -461,12 +466,10 @@ export class SocketManager {
     
     // Send only movement event - server handles state updates internally
     this.socket.send(JSON.stringify({ 
-      type: 'movement', 
+      type: 'movement',
       event,
-      playerId: this.playerId 
+      playerId: this.playerId
     }));
-
-    this.lastSentMovement = { ...event };
   }
 
   public sendHit(victimId: number, damage: number, position: number[], distance: number) {
